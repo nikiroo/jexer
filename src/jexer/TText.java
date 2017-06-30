@@ -206,6 +206,20 @@ public final class TText extends TWidget {
 
         computeBounds();
     }
+    
+    /**
+     * Go to the top edge of the scroller.
+     */
+    public void toTop() {
+        vScroller.toTop();
+    }
+
+    /**
+     * Go to the bottom edge of the scroller.
+     */
+    public void toBottom() {
+        vScroller.toBottom();
+    }
 
     /**
      * Public constructor.
