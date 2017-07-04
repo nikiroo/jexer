@@ -66,6 +66,11 @@ public class TWindow extends TWidget {
      * Window is centered (default no).
      */
     public static final int CENTERED    = 0x04;
+    
+    /**
+     * Window cannot be closed (default no, can be closed).
+     */
+    public static final int UNCLOSABLE  = 0x08;
 
     // ------------------------------------------------------------------------
     // Common window attributes -----------------------------------------------
@@ -432,6 +437,14 @@ public class TWindow extends TWidget {
         }
         return true;
     }
+    
+    /**
+     * This window cannot be closed.
+     * @return TRUE if it cannot be closed
+     */
+    public boolean isUnclosable() {
+    	return (flags & UNCLOSABLE) != 0;
+    }
 
     /**
      * Retrieve the background color.
@@ -537,22 +550,23 @@ public class TWindow extends TWidget {
         putCharXY(titleLeft + title.length() + 1, 0, ' ', border);
 
         if (isActive()) {
-
-            // Draw the close button
-            putCharXY(2, 0, '[', border);
-            putCharXY(4, 0, ']', border);
-            if (mouseOnClose() && mouse.isMouse1()) {
-                putCharXY(3, 0, GraphicsChars.CP437[0x0F],
-                    !isModal()
-                    ? getTheme().getColor("twindow.border.windowmove")
-                    : getTheme().getColor("twindow.border.modal.windowmove"));
-            } else {
-                putCharXY(3, 0, GraphicsChars.CP437[0xFE],
-                    !isModal()
-                    ? getTheme().getColor("twindow.border.windowmove")
-                    : getTheme().getColor("twindow.border.modal.windowmove"));
-            }
-
+        	if (!isUnclosable()) {
+	            // Draw the close button
+	            putCharXY(2, 0, '[', border);
+	            putCharXY(4, 0, ']', border);
+	            if (mouseOnClose() && mouse.isMouse1()) {
+	                putCharXY(3, 0, GraphicsChars.CP437[0x0F],
+	                    !isModal()
+	                    ? getTheme().getColor("twindow.border.windowmove")
+	                    : getTheme().getColor("twindow.border.modal.windowmove"));
+	            } else {
+	                putCharXY(3, 0, GraphicsChars.CP437[0xFE],
+	                    !isModal()
+	                    ? getTheme().getColor("twindow.border.windowmove")
+	                    : getTheme().getColor("twindow.border.modal.windowmove"));
+	            }
+        	}
+        	
             // Draw the maximize button
             if (!isModal()) {
 
@@ -594,12 +608,15 @@ public class TWindow extends TWidget {
      * @return true if mouse is currently on the close button
      */
     private boolean mouseOnClose() {
-        if ((mouse != null)
-            && (mouse.getAbsoluteY() == getY())
-            && (mouse.getAbsoluteX() == getX() + 3)
-        ) {
-            return true;
-        }
+    	if (((flags & UNCLOSABLE) == 0)) {
+	        if ((mouse != null)
+	            && (mouse.getAbsoluteY() == getY())
+	            && (mouse.getAbsoluteX() == getX() + 3)
+	        ) {
+	            return true;
+	        }
+    	}
+    	
         return false;
     }
 
