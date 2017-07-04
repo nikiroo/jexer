@@ -62,7 +62,7 @@ echo "TEST_PARAMS = $cols $ok $ko" >> Makefile
 echo "NAME = jexer" >> Makefile
 echo "PREFIX = $PREFIX" >> Makefile
 echo "JAR_FLAGS += -C bin/ jexer -C bin/ VERSION" >> Makefile
-#echo "SJAR_FLAGS += -C src/ jexer -C ./ LICENSE -C ./ README.md -C ./ VERSION" >> Makefile
+echo "SJAR_FLAGS += -C src/ jexer -C ./ LICENSE -C ./ README.md -C ./ VERSION" >> Makefile
 
 cat Makefile.base >> Makefile
 
