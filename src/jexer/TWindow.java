@@ -306,28 +306,35 @@ public class TWindow extends TWidget {
     }
 
     /**
-     * Maximize window.
+     * Maximize window to the current maximum size.
      */
     private void maximize() {
-        restoreWindowWidth = getWidth();
-        restoreWindowHeight = getHeight();
-        restoreWindowX = getX();
-        restoreWindowY = getY();
+    	if (!maximized) {
+	        restoreWindowWidth = getWidth();
+	        restoreWindowHeight = getHeight();
+	        restoreWindowX = getX();
+	        restoreWindowY = getY();
+    	}
+    	
         setWidth(getScreen().getWidth());
         setHeight(application.getDesktopBottom() - 1);
         setX(0);
         setY(1);
+        
         maximized = true;
     }
 
     /**
-     * Restote (unmaximize) window.
+     * Restore (unmaximize) window.
      */
     private void restore() {
-        setWidth(restoreWindowWidth);
-        setHeight(restoreWindowHeight);
-        setX(restoreWindowX);
-        setY(restoreWindowY);
+    	if (maximized) {
+	        setWidth(restoreWindowWidth);
+	        setHeight(restoreWindowHeight);
+	        setX(restoreWindowX);
+	        setY(restoreWindowY);
+    	}
+    	
         maximized = false;
     }
 
