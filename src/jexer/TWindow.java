@@ -308,7 +308,7 @@ public class TWindow extends TWidget {
     /**
      * Maximize window to the current maximum size.
      */
-    private void maximize() {
+    public void maximize() {
     	if (!maximized) {
 	        restoreWindowWidth = getWidth();
 	        restoreWindowHeight = getHeight();
@@ -327,7 +327,7 @@ public class TWindow extends TWidget {
     /**
      * Restore (unmaximize) window.
      */
-    private void restore() {
+    public void restore() {
     	if (maximized) {
 	        setWidth(restoreWindowWidth);
 	        setHeight(restoreWindowHeight);
