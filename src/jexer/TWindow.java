@@ -246,6 +246,11 @@ public class TWindow extends TWidget {
      * If true, this window is maximized.
      */
     private boolean maximized = false;
+    
+    /**
+     * If true, the window is in fullscreen mode (no borders, maximum size).
+     */
+    private boolean fullscreen = false;
 
     /**
      * Remember mouse state.
@@ -280,12 +285,30 @@ public class TWindow extends TWidget {
     public final void setMaximumWindowWidth(final int maximumWindowWidth) {
         this.maximumWindowWidth = maximumWindowWidth;
     }
+    
+    /**
+     * Fullscreen mode (no borders, maximum size).
+     * 
+     * @return TRUE if in fullscreen
+     */
+    public boolean isFullscreen() {
+		return fullscreen;
+	}
+    
+    /**
+     * Fullscreen mode (no borders, maximum size).
+     * 
+     * @param fullscreen TRUE to set fullscreen mode
+     */
+    public void setFullscreen(boolean fullscreen) {
+		this.fullscreen = fullscreen;
+	}
 
     /**
      * Recenter the window on-screen.
      */
     public final void center() {
-        if ((flags & CENTERED) != 0) {
+        if ((flags & CENTERED) != 0 && !fullscreen) {
             if (getWidth() < getScreen().getWidth()) {
                 setX((getScreen().getWidth() - getWidth()) / 2);
             } else {
@@ -303,16 +326,27 @@ public class TWindow extends TWidget {
     /**
      * Maximize window.
      */
-    private void maximize() {
-        restoreWindowWidth = getWidth();
-        restoreWindowHeight = getHeight();
-        restoreWindowX = getX();
-        restoreWindowY = getY();
-        setWidth(getScreen().getWidth());
-        setHeight(application.getDesktopBottom() - 1);
-        setX(0);
-        setY(1);
-        maximized = true;
+    public void maximize() {
+    	if (!maximized && !fullscreen) {
+	        restoreWindowWidth = getWidth();
+	        restoreWindowHeight = getHeight();
+	        restoreWindowX = getX();
+	        restoreWindowY = getY();
+    	}
+        
+        if (fullscreen) {
+        	super.setWidth(getScreen().getWidth() + 2);
+        	super.setHeight(application.getDesktopBottom() + 1);
+        	super.setX(-1);
+        	super.setY(0);
+        } else {
+        	super.setWidth(getScreen().getWidth());
+        	super.setHeight(application.getDesktopBottom() - 1);
+        	super.setX(0);
+        	super.setY(1);
+        }
+        
+        maximized = !fullscreen;
     }
 
     /**
@@ -324,6 +358,7 @@ public class TWindow extends TWidget {
         setX(restoreWindowX);
         setY(restoreWindowY);
         maximized = false;
+        fullscreen = false;
     }
 
     // ------------------------------------------------------------------------

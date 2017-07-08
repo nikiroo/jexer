@@ -1374,6 +1374,14 @@ public class TApplication implements Runnable {
                 return;
             }
             int z = windows.size();
+            
+            // Do not take fullscreen windows into account for tiling purpopses
+            for (TWindow window : windows) {
+            	if (window.isFullscreen()) {
+            		z--;
+            	}
+            }
+            
             if (z == 0) {
                 return;
             }
@@ -1407,6 +1415,10 @@ public class TApplication implements Runnable {
                 }
 
                 TWindow w = sorted.get(i);
+                if (w.isFullscreen()) {
+                	continue;
+                }
+                
                 w.setX(logicalX * newWidth);
                 w.setWidth(newWidth);
                 if (i >= ((a - 1) * b)) {
@@ -1435,6 +1447,10 @@ public class TApplication implements Runnable {
             Collections.sort(sorted);
             Collections.reverse(sorted);
             for (TWindow window: sorted) {
+            	// Cannot cascade fullscreen windows
+            	if (window.isFullscreen()) {
+            		continue;
+            	}
                 window.setX(x);
                 window.setY(y);
                 x++;
@@ -1479,7 +1495,7 @@ public class TApplication implements Runnable {
         int height = getScreen().getHeight();
         int overlapMatrix[][] = new int[width][height];
         for (TWindow w: windows) {
-            if (window == w) {
+            if (window == w || w.isFullscreen()) {
                 continue;
             }
             for (int x = w.getX(); x < w.getX() + w.getWidth(); x++) {
@@ -1570,8 +1586,10 @@ public class TApplication implements Runnable {
         } // for (int y = yMin; y < yMax; y++)
 
         // Finally, set the window's new coordinates.
-        window.setX(windowX);
-        window.setY(windowY);
+        if (!window.isFullscreen()) {
+	        window.setX(windowX);
+	        window.setY(windowY);
+        }
     }
 
     // ------------------------------------------------------------------------
