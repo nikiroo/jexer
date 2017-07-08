@@ -28,6 +28,27 @@
  */
 package jexer;
 
+import static jexer.TCommand.cmWindowClose;
+import static jexer.TCommand.cmWindowMove;
+import static jexer.TCommand.cmWindowNext;
+import static jexer.TCommand.cmWindowPrevious;
+import static jexer.TCommand.cmWindowZoom;
+import static jexer.TKeypress.kbCtrlF5;
+import static jexer.TKeypress.kbCtrlW;
+import static jexer.TKeypress.kbDown;
+import static jexer.TKeypress.kbEnter;
+import static jexer.TKeypress.kbEsc;
+import static jexer.TKeypress.kbF5;
+import static jexer.TKeypress.kbF6;
+import static jexer.TKeypress.kbLeft;
+import static jexer.TKeypress.kbRight;
+import static jexer.TKeypress.kbShiftDown;
+import static jexer.TKeypress.kbShiftF6;
+import static jexer.TKeypress.kbShiftLeft;
+import static jexer.TKeypress.kbShiftRight;
+import static jexer.TKeypress.kbShiftUp;
+import static jexer.TKeypress.kbUp;
+
 import java.util.HashSet;
 
 import jexer.bits.Cell;
@@ -40,8 +61,6 @@ import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
 import jexer.io.Screen;
 import jexer.menu.TMenu;
-import static jexer.TCommand.*;
-import static jexer.TKeypress.*;
 
 /**
  * TWindow is the top-level container and drawing surface for other widgets.
@@ -251,6 +270,11 @@ public class TWindow extends TWidget {
      * If true, this window is maximized.
      */
     private boolean maximized = false;
+    
+    /**
+     * If true, the window is in fullscreen mode (no borders, maximum size).
+     */
+    private boolean fullscreen = false;
 
     /**
      * Remember mouse state.
@@ -285,12 +309,30 @@ public class TWindow extends TWidget {
     public final void setMaximumWindowWidth(final int maximumWindowWidth) {
         this.maximumWindowWidth = maximumWindowWidth;
     }
+    
+    /**
+     * Fullscreen mode (no borders, maximum size).
+     * 
+     * @return TRUE if in fullscreen
+     */
+    public boolean isFullscreen() {
+		return fullscreen;
+	}
+    
+    /**
+     * Fullscreen mode (no borders, maximum size).
+     * 
+     * @param fullscreen TRUE to set fullscreen mode
+     */
+    public void setFullscreen(boolean fullscreen) {
+		this.fullscreen = fullscreen;
+	}
 
     /**
      * Recenter the window on-screen.
      */
     public final void center() {
-        if ((flags & CENTERED) != 0) {
+        if ((flags & CENTERED) != 0 && !fullscreen) {
             if (getWidth() < getScreen().getWidth()) {
                 setX((getScreen().getWidth() - getWidth()) / 2);
             } else {
@@ -309,19 +351,26 @@ public class TWindow extends TWidget {
      * Maximize window to the current maximum size.
      */
     public void maximize() {
-    	if (!maximized) {
+    	if (!maximized && !fullscreen) {
 	        restoreWindowWidth = getWidth();
 	        restoreWindowHeight = getHeight();
 	        restoreWindowX = getX();
 	        restoreWindowY = getY();
     	}
-    	
-        setWidth(getScreen().getWidth());
-        setHeight(application.getDesktopBottom() - 1);
-        setX(0);
-        setY(1);
+
+    	if (fullscreen) {
+        	super.setWidth(getScreen().getWidth() + 2);
+        	super.setHeight(application.getDesktopBottom() + 1);
+        	super.setX(-1);
+        	super.setY(0);
+        } else {
+        	super.setWidth(getScreen().getWidth());
+        	super.setHeight(application.getDesktopBottom() - 1);
+        	super.setX(0);
+        	super.setY(1);
+        }
         
-        maximized = true;
+        maximized = !fullscreen;
     }
 
     /**
@@ -336,6 +385,7 @@ public class TWindow extends TWidget {
     	}
     	
         maximized = false;
+        fullscreen = false;
     }
 
     // ------------------------------------------------------------------------
