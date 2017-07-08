@@ -1363,7 +1363,7 @@ public class TApplication implements Runnable {
         if (activeMenu != null) {
             return;
         }
-        for (TWindow window : windows) {
+        for (TWindow window : new ArrayList<TWindow>(windows)) {
             closeWindow(window);
         }
     }
