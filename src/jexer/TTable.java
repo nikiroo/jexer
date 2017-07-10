@@ -20,6 +20,11 @@ import jexer.bits.CellAttributes;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 
+/**
+ * A table widget to display and browse through tabular data.
+ * 
+ * @author niki
+ */
 public class TTable extends TWidget {
 	private List<String> headers;
 	private List<Integer> columnSizes;
@@ -32,7 +37,7 @@ public class TTable extends TWidget {
 	private int maxLineWidth;
 	private int topY;
 
-	// ┃ │
+	// some nice characters: ┃ │ |
 	private final String INTER_COL = " │ ";
 
 	private THScroller hScroller;
@@ -48,32 +53,61 @@ public class TTable extends TWidget {
 	 */
 	private TAction moveAction = null;
 
+	/**
+	 * Create a new {@link TTable}.
+	 * 
+	 * @param parent
+	 *            the parent widget
+	 * @param x
+	 *            the X position
+	 * @param y
+	 *            the Y position
+	 * @param width
+	 *            the width of the {@link TTable}
+	 * @param height
+	 *            the height of the {@link TTable}
+	 * @param enterAction
+	 *            an action to call when a cell is selected
+	 * @param moveAction
+	 *            an action to call when the currently active cell is changed
+	 */
 	public TTable(TWidget parent, int x, int y, int width, int height,
 			final TAction enterAction, final TAction moveAction) {
 		this(parent, x, y, width, height, enterAction, moveAction, null, false);
 	}
 
+	/**
+	 * Create a new {@link TTable}.
+	 * 
+	 * @param parent
+	 *            the parent widget
+	 * @param x
+	 *            the X position
+	 * @param y
+	 *            the Y position
+	 * @param width
+	 *            the width of the {@link TTable}
+	 * @param height
+	 *            the height of the {@link TTable}
+	 * @param enterAction
+	 *            an action to call when a cell is selected
+	 * @param moveAction
+	 *            an action to call when the currently active cell is changed
+	 * @param headers
+	 *            the headers of the {@link TTable}
+	 * @param showHeaders
+	 *            TRUE to show the headers on screen
+	 */
 	public TTable(TWidget parent, int x, int y, int width, int height,
 			final TAction enterAction, final TAction moveAction,
 			List<String> headers, boolean showHeaders) {
 		super(parent, x, y, width, height);
 
-		if (headers != null) {
-			this.headers = headers;
-		} else {
-			this.headers = new ArrayList<String>();
-		}
-
-		this.showHeader = showHeaders;
-		topY = showHeader ? 2 : 0;
-
-		this.columnSizes = new ArrayList<Integer>(this.headers.size());
-		for (int i = 0; i < this.headers.size(); i++) {
-			this.columnSizes.add(-1);
-		}
-
 		this.lines = new ArrayList<List<String>>();
 		this.selectedLine = -1;
+		this.selectedColumn = -1;
+
+		setHeaders(headers, showHeaders);
 
 		this.enterAction = enterAction;
 		this.moveAction = moveAction;
@@ -81,20 +115,120 @@ public class TTable extends TWidget {
 		reflow();
 	}
 
-	// -1 = auto
+	/**
+	 * Change the headers of the table.
+	 * <p>
+	 * Note that if some data is present, the number of columns <b>MUST</b> be
+	 * identical.
+	 * 
+	 * @param headers
+	 *            the new headers
+	 * @param showHeaders
+	 *            TRUE to show them on screen
+	 */
+	public void setHeaders(List<String> headers, boolean showHeaders) {
+		List<String> line = null;
+		if (headers != null) {
+			this.headers = headers;
+			if (lines.size() > 0) {
+				line = lines.get(0);
+			}
+		} else {
+			this.headers = new ArrayList<String>();
+		}
+
+		if (line != null && headers != null && line.size() != headers.size()) {
+			throw new IllegalArgumentException(
+					String.format(
+							"Cannot set the headers of a table if the number of items is not equals to that of the current data lines: "
+									+ "%d elements in the data lines <> %d elements in the headers",
+							line.size(), headers.size()));
+		}
+
+		this.showHeader = showHeaders;
+		this.topY = this.showHeader ? 2 : 0;
+		this.columnSizes = new ArrayList<Integer>(this.headers.size());
+		for (int i = 0; i < this.headers.size(); i++) {
+			this.columnSizes.add(-1);
+		}
+	}
+
+	/**
+	 * Set the size of a column by index (-1 for auto size).
+	 * 
+	 * @param index
+	 *            the index of the column
+	 * @param size
+	 *            the size or -1 for auto
+	 * @throws IndexOutOfBoundsException
+	 *             when the index is out of bounds
+	 */
 	public void setColumnSize(int index, int size) {
 		// no checks because we want IndexOutOfBounds
 		columnSizes.set(index, size);
 	}
 
+	/**
+	 * The currently selected line (or -1 if no line is selected).
+	 * 
+	 * @return the selected line
+	 */
 	public int getSelectedLine() {
 		return selectedLine;
 	}
 
+	/**
+	 * The currently selected line (or -1 if no line is selected).
+	 * <p>
+	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * changes.
+	 * 
+	 * @param selectedLine
+	 *            the selected line
+	 */
+	public void setSelectedLine(int selectedLine) {
+		if (selectedLine < -1 || selectedLine >= getNumberOfLines()) {
+			throw new IndexOutOfBoundsException(String.format(
+					"Cannot set column %d on a table with %d columns",
+					selectedColumn, getNumberOfLines()));
+		}
+
+		this.selectedLine = selectedLine;
+	}
+
+	/**
+	 * The currently selected column (or -1 if no column is selected).
+	 * 
+	 * @return the selected column
+	 */
 	public int getSelectedColumn() {
 		return selectedColumn;
 	}
 
+	/**
+	 * The currently selected column (or -1 if no column is selected).
+	 * <p>
+	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * changes.
+	 * 
+	 * @param selectedColumn
+	 *            the selected column
+	 */
+	public void setSelectedColumn(int selectedColumn) {
+		if (selectedColumn < -1 || selectedColumn >= getNumberOfColumns()) {
+			throw new IndexOutOfBoundsException(String.format(
+					"Cannot set column %d on a table with %d columns",
+					selectedColumn, getNumberOfColumns()));
+		}
+
+		this.selectedColumn = selectedColumn;
+	}
+
+	/**
+	 * The currently selected cell.
+	 * 
+	 * @return the cell
+	 */
 	public String getSelectedCell() {
 		if (selectedLine >= 0 && selectedColumn >= 0) {
 			return lines.get(selectedLine).get(selectedColumn);
@@ -121,7 +255,18 @@ public class TTable extends TWidget {
 		}
 	}
 
-	// reflow needed when done
+	/**
+	 * Add a line to the table.
+	 * <p>
+	 * Note that if some data is present, the number of columns <b>MUST</b> be
+	 * identical.
+	 * <p>
+	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * changes.
+	 * 
+	 * @param line
+	 *            the line to add
+	 */
 	public void addLine(List<String> line) {
 		if (line.size() != headers.size()) {
 			throw new IllegalArgumentException(
@@ -134,21 +279,44 @@ public class TTable extends TWidget {
 		lines.add(line);
 	}
 
+	/**
+	 * The size of the table in number of lines.
+	 * 
+	 * @return the size
+	 */
 	public int size() {
 		return getNumberOfLines();
 	}
 
+	/**
+	 * The number of lines.
+	 * 
+	 * @return the number of lines
+	 */
 	public int getNumberOfLines() {
 		return lines.size();
 	}
 
+	/**
+	 * The number of columns.
+	 * 
+	 * @return the number of columns
+	 */
 	public int getNumberOfColumns() {
 		return headers.size();
 	}
 
-	// reflow needed when done
+	/**
+	 * Clear the content of the {@link TTable}.
+	 * <p>
+	 * It will not affect the headers.
+	 * <p>
+	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * changes.
+	 */
 	public void clear() {
 		selectedLine = -1;
+		selectedColumn = -1;
 		lines.clear();
 	}
 
@@ -156,11 +324,9 @@ public class TTable extends TWidget {
 	 * Resize for a new width/height.
 	 */
 	public void reflow() {
-		// Reset the lines
-		selectedLine = -1;
-		selectedColumn = -1;
-
 		computeLinesSize();
+
+		// TODO: fix the fact that reflow() will reset the scroll window
 
 		// Start at the top
 		if (vScroller == null) {
@@ -194,8 +360,11 @@ public class TTable extends TWidget {
 		hScroller.setBigChange(getWidth() - 1);
 	}
 
+	/**
+	 * Compute {@link TTable#maxLineWidth} and auto column sizes (negative
+	 * values in {@link TTable#columnSizes}).
+	 */
 	private void computeLinesSize() {
-		// compute maxLineWidth and auto column sizes
 		maxLineWidth = 0;
 		int visibleColumns = 0;
 		int lastAutoColumn = -1;
@@ -244,7 +413,21 @@ public class TTable extends TWidget {
 		}
 	}
 
-	// line can be null
+	/**
+	 * Draw the given line (or an empty one if line is NULL) at the specified
+	 * index and offset.
+	 * 
+	 * @param line
+	 *            the line to draw
+	 * @param xOffset
+	 *            the (positive or 0) X offset to apply while drawing
+	 * @param y
+	 *            the Y position
+	 * @param color
+	 *            the characters colour
+	 * @param colorSep
+	 *            the separators colour
+	 */
 	private void drawLine(List<String> line, int xOffset, int y,
 			CellAttributes color, CellAttributes colorSep) {
 		int x = 0;
@@ -289,6 +472,9 @@ public class TTable extends TWidget {
 			// TODO: draw horizontal line? Empty line with seps? blank line?
 			// drawLine(null, hScroller.getValue(), 1, colorHeaders,
 			// colorHeadersSep);
+			String formatString = "%-" + Integer.toString(getWidth()) + "s";
+			String data = String.format(formatString, "");
+			getScreen().putStringXY(0, 1, data, colorHeaders);
 		}
 
 		CellAttributes color = null;
@@ -320,12 +506,6 @@ public class TTable extends TWidget {
 		}
 	}
 
-	/**
-	 * Handle mouse press events.
-	 * 
-	 * @param mouse
-	 *            mouse button press event
-	 */
 	@Override
 	public void onMouseDown(final TMouseEvent mouse) {
 		if (mouse.isMouseWheelUp()) {
@@ -349,16 +529,11 @@ public class TTable extends TWidget {
 		super.onMouseDown(mouse);
 	}
 
-	/**
-	 * Handle keystrokes.
-	 * 
-	 * @param keypress
-	 *            keystroke event
-	 */
 	@Override
 	public void onKeypress(final TKeypressEvent keypress) {
 		// TODO: could be exported to a base class allowing internal right(int
 		// count), left(int count)...
+		// TODO 2: left/right to switch column?
 		if (keypress.equals(kbLeft)) {
 			hScroller.decrement();
 		} else if (keypress.equals(kbRight)) {
@@ -382,7 +557,7 @@ public class TTable extends TWidget {
 		} else if (keypress.equals(kbDown)) {
 			if (size() > 0) {
 				if (selectedLine >= 0) {
-					if (selectedLine + topY + 1 < size() - 1) {
+					if (selectedLine < size() - 1) {
 						selectedLine++;
 						if (selectedLine + topY + 1 - vScroller.getValue() == getHeight() - 1) {
 							vScroller.increment();
