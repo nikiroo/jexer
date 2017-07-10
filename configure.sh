@@ -56,7 +56,7 @@ else
 fi;
 
 echo "MAIN = jexer/demos/Demo1" > Makefile
-echo "MORE = $CLI $TUI $GUI" >> Makefile
+echo "MORE = jexer/TTable $CLI $TUI $GUI" >> Makefile
 echo "TEST = jexer/demos/Demo1" >> Makefile
 echo "TEST_PARAMS = $cols $ok $ko" >> Makefile
 echo "NAME = jexer" >> Makefile
