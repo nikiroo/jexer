@@ -38,6 +38,7 @@ import jexer.event.TKeypressEvent;
 import jexer.event.TMenuEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
+import jexer.event.TResizeEvent.Type;
 import jexer.io.Screen;
 import jexer.menu.TMenu;
 import static jexer.TCommand.*;
@@ -301,7 +302,14 @@ public class TWindow extends TWidget {
      * @param fullscreen TRUE to set fullscreen mode
      */
     public void setFullscreen(boolean fullscreen) {
-		this.fullscreen = fullscreen;
+		if (fullscreen != this.fullscreen) {
+			this.fullscreen = fullscreen;
+			if (fullscreen) {
+				maximize();
+			} else {
+				restore();
+			}
+		}
 	}
 
     /**
@@ -333,32 +341,39 @@ public class TWindow extends TWidget {
 	        restoreWindowX = getX();
 	        restoreWindowY = getY();
     	}
-        
-        if (fullscreen) {
-        	super.setWidth(getScreen().getWidth() + 2);
-        	super.setHeight(application.getDesktopBottom() + 1);
-        	super.setX(-1);
-        	super.setY(0);
+
+    	if (fullscreen) {
+        	setWidth(getScreen().getWidth() + 2);
+        	setHeight(application.getDesktopBottom() + 1);
+        	setX(-1);
+        	setY(0);
         } else {
-        	super.setWidth(getScreen().getWidth());
-        	super.setHeight(application.getDesktopBottom() - 1);
-        	super.setX(0);
-        	super.setY(1);
+        	setWidth(getScreen().getWidth());
+        	setHeight(application.getDesktopBottom() - 1);
+        	setX(0);
+        	setY(1);
         }
         
         maximized = !fullscreen;
+        
+        onResize(new TResizeEvent(Type.WIDGET, getWidth(), getHeight()));
     }
 
     /**
      * Restote (unmaximize) window.
      */
     private void restore() {
-        setWidth(restoreWindowWidth);
-        setHeight(restoreWindowHeight);
-        setX(restoreWindowX);
-        setY(restoreWindowY);
+    	if (maximized) {
+	        setWidth(restoreWindowWidth);
+	        setHeight(restoreWindowHeight);
+	        setX(restoreWindowX);
+	        setY(restoreWindowY);
+    	}
+    	
         maximized = false;
         fullscreen = false;
+        
+        onResize(new TResizeEvent(Type.WIDGET, getWidth(), getHeight()));
     }
 
     // ------------------------------------------------------------------------

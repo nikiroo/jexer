@@ -1499,11 +1499,11 @@ public class TApplication implements Runnable {
                 continue;
             }
             for (int x = w.getX(); x < w.getX() + w.getWidth(); x++) {
-                if (x == width) {
+                if (x >= width) {
                     continue;
                 }
                 for (int y = w.getY(); y < w.getY() + w.getHeight(); y++) {
-                    if (y == height) {
+                    if (y >= height) {
                         continue;
                     }
                     overlapMatrix[x][y]++;
