@@ -19,6 +19,8 @@ import java.util.List;
 import jexer.bits.CellAttributes;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
+import jexer.event.TResizeEvent;
+import jexer.event.TResizeEvent.Type;
 
 /**
  * A table widget to display and browse through tabular data.
@@ -330,19 +332,19 @@ public class TTable extends TWidget {
 
 		// Start at the top
 		if (vScroller == null) {
-			vScroller = new TVScroller(this, getWidth() - 1, topY,
-					getHeight() - 1);
+			vScroller = new TVScroller(this, getWidth() - 1, topY, getHeight()
+					- topY - 1);
 		} else {
 			vScroller.setX(getWidth() - 1);
-			vScroller.setHeight(getHeight() - 1);
+			vScroller.setHeight(getHeight() - topY - 1);
 		}
-		vScroller.setBottomValue(size() - getHeight() + 1);
+		vScroller.setBottomValue(size() - getHeight() - topY + 1);
 		vScroller.setTopValue(0);
 		vScroller.setValue(0);
 		if (vScroller.getBottomValue() < 0) {
 			vScroller.setBottomValue(0);
 		}
-		vScroller.setBigChange(getHeight() - 1);
+		vScroller.setBigChange(getHeight() - 1 - topY);
 
 		// Start at the left
 		if (hScroller == null) {
@@ -620,5 +622,11 @@ public class TTable extends TWidget {
 			// Pass other keys (tab etc.) on
 			super.onKeypress(keypress);
 		}
+	}
+
+	@Override
+	public void onResize(TResizeEvent resize) {
+		super.onResize(resize);
+		reflow();
 	}
 }
