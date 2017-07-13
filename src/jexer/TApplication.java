@@ -915,6 +915,26 @@ public class TApplication implements Runnable {
 
     }
 
+	/**
+	 * Exit the application (the effects are not immediate, the process is just
+	 * notified that it should exit at its earliest convenience).
+	 * 
+	 * @param askConfirmation
+	 *            interactively ask confirmation to the user with a default,
+	 *            hard-coded English message
+	 * 
+	 * @return TRUE if the process is in shutting-down mode after this call
+	 */
+	public boolean exit(boolean askConfirmation) {
+		if (!askConfirmation
+				|| messageBox("Confirmation", "Exit application?",
+						TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
+			quit = true;
+		}
+
+		return quit;
+	}
+
     /**
      * Peek at certain application-level events, add to eventQueue, and wake
      * up the consuming Thread.
@@ -1990,10 +2010,7 @@ public class TApplication implements Runnable {
     protected boolean onCommand(final TCommandEvent command) {
         // Default: handle cmExit
         if (command.equals(cmExit)) {
-            if (messageBox("Confirmation", "Exit application?",
-                    TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
-                quit = true;
-            }
+            exit(true);
             return true;
         }
 
@@ -2029,10 +2046,7 @@ public class TApplication implements Runnable {
 
         // Default: handle MID_EXIT
         if (menu.getId() == TMenu.MID_EXIT) {
-            if (messageBox("Confirmation", "Exit application?",
-                    TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
-                quit = true;
-            }
+            exit(true);
             return true;
         }
 
