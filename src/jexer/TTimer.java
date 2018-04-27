@@ -33,7 +33,11 @@ import java.util.Date;
 /**
  * TTimer implements a simple timer.
  */
-public final class TTimer {
+public class TTimer {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * If true, re-schedule after every tick.  Note package private access.
@@ -51,33 +55,13 @@ public final class TTimer {
     private Date nextTick;
 
     /**
-     * Get the next time this timer needs to be ticked.  Note package private
-     * access.
-     *
-     * @return time at which action should be called
-     */
-    Date getNextTick() {
-        return nextTick;
-    }
-
-    /**
      * The action to perfom on a tick.
      */
     private TAction action;
 
-    /**
-     * Tick this timer.  Note package private access.
-     */
-    void tick() {
-        if (action != null) {
-            action.DO();
-        }
-        // Set next tick
-        Date ticked = new Date();
-        if (recurring) {
-            nextTick = new Date(ticked.getTime() + duration);
-        }
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Package private constructor.
@@ -94,6 +78,43 @@ public final class TTimer {
 
         Date now = new Date();
         nextTick = new Date(now.getTime() + duration);
+    }
+
+    // ------------------------------------------------------------------------
+    // TTimer -----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get the next time this timer needs to be ticked.  Note package private
+     * access.
+     *
+     * @return time at which action should be called
+     */
+    Date getNextTick() {
+        return nextTick;
+    }
+
+    /**
+     * Set the recurring flag.
+     *
+     * @param recurring if true, re-schedule this timer after every tick
+     */
+    public void setRecurring(final boolean recurring) {
+        this.recurring = recurring;
+    }
+
+    /**
+     * Tick this timer.  Note package private access.
+     */
+    void tick() {
+        if (action != null) {
+            action.DO();
+        }
+        // Set next tick
+        Date ticked = new Date();
+        if (recurring) {
+            nextTick = new Date(ticked.getTime() + duration);
+        }
     }
 
 }

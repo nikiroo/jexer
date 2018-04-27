@@ -32,6 +32,7 @@ import java.io.IOException;
 
 import jexer.*;
 import jexer.event.*;
+import jexer.ttree.*;
 import static jexer.TCommand.*;
 import static jexer.TKeypress.*;
 
@@ -40,10 +41,18 @@ import static jexer.TKeypress.*;
  */
 public class DemoTreeViewWindow extends TWindow {
 
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Hang onto my TTreeView so I can resize it with the window.
      */
-    private TTreeView treeView;
+    private TTreeViewWidget treeView;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
@@ -55,7 +64,7 @@ public class DemoTreeViewWindow extends TWindow {
         super(parent, "Tree View", 0, 0, 44, 16, TWindow.RESIZABLE);
 
         // Load the treeview with "stuff"
-        treeView = addTreeView(1, 1, 40, 12);
+        treeView = addTreeViewWidget(1, 1, 40, 12);
         new TDirectoryTreeItem(treeView, ".", true);
 
         statusBar = newStatusBar("Treeview demonstration");
@@ -65,6 +74,10 @@ public class DemoTreeViewWindow extends TWindow {
         statusBar.addShortcutKeypress(kbF10, cmExit, "Exit");
     }
 
+    // ------------------------------------------------------------------------
+    // TWindow ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Handle window/screen resize events.
      *
@@ -73,10 +86,10 @@ public class DemoTreeViewWindow extends TWindow {
     @Override
     public void onResize(final TResizeEvent resize) {
         if (resize.getType() == TResizeEvent.Type.WIDGET) {
-            // Resize the text field
-            treeView.setWidth(resize.getWidth() - 4);
-            treeView.setHeight(resize.getHeight() - 4);
-            treeView.reflow();
+            // Resize the treeView field
+            TResizeEvent treeSize = new TResizeEvent(TResizeEvent.Type.WIDGET,
+                resize.getWidth() - 4, resize.getHeight() - 4);
+            treeView.onResize(treeSize);
             return;
         }
 

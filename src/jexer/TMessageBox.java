@@ -30,6 +30,7 @@ package jexer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ResourceBundle;
 
 import jexer.event.TKeypressEvent;
 import static jexer.TKeypress.*;
@@ -38,7 +39,6 @@ import static jexer.TKeypress.*;
  * TMessageBox is a system-modal dialog with buttons for OK, Cancel, Yes, or
  * No.  Call it like:
  *
- * <p>
  * <pre>
  * {@code
  *     box = application.messageBox(title, caption,
@@ -52,6 +52,11 @@ import static jexer.TKeypress.*;
  *
  */
 public class TMessageBox extends TWindow {
+
+    /**
+     * Translated strings.
+     */
+    private static final ResourceBundle i18n = ResourceBundle.getBundle(TMessageBox.class.getName());
 
     /**
      * Message boxes have these supported types.
@@ -215,7 +220,7 @@ public class TMessageBox extends TWindow {
                 setWidth(15);
             }
             buttonX = (getWidth() - 11) / 2;
-            buttons.add(addButton("  &OK  ", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("okButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.OK;
@@ -232,7 +237,7 @@ public class TMessageBox extends TWindow {
                 setWidth(26);
             }
             buttonX = (getWidth() - 22) / 2;
-            buttons.add(addButton("  &OK  ", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("okButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.OK;
@@ -242,7 +247,7 @@ public class TMessageBox extends TWindow {
                 )
             );
             buttonX += 8 + 4;
-            buttons.add(addButton("&Cancel", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("cancelButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.CANCEL;
@@ -259,7 +264,7 @@ public class TMessageBox extends TWindow {
                 setWidth(20);
             }
             buttonX = (getWidth() - 16) / 2;
-            buttons.add(addButton("&Yes", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("yesButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.YES;
@@ -269,7 +274,7 @@ public class TMessageBox extends TWindow {
                 )
             );
             buttonX += 5 + 4;
-            buttons.add(addButton("&No", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("noButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.NO;
@@ -286,7 +291,7 @@ public class TMessageBox extends TWindow {
                 setWidth(31);
             }
             buttonX = (getWidth() - 27) / 2;
-            buttons.add(addButton("&Yes", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("yesButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.YES;
@@ -296,7 +301,7 @@ public class TMessageBox extends TWindow {
                 )
             );
             buttonX += 5 + 4;
-            buttons.add(addButton("&No", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("noButton"), buttonX, lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.NO;
@@ -306,7 +311,8 @@ public class TMessageBox extends TWindow {
                 )
             );
             buttonX += 4 + 4;
-            buttons.add(addButton("&Cancel", buttonX, lineI,
+            buttons.add(addButton(i18n.getString("cancelButton"), buttonX,
+                    lineI,
                     new TAction() {
                         public void DO() {
                             result = Result.CANCEL;

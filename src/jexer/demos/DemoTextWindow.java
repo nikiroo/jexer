@@ -39,10 +39,18 @@ import static jexer.TKeypress.*;
  */
 public class DemoTextWindow extends TWindow {
 
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Hang onto my TText so I can resize it with the window.
      */
     private TText textField;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor makes a text window out of any string.
@@ -54,8 +62,32 @@ public class DemoTextWindow extends TWindow {
     public DemoTextWindow(final TApplication parent, final String title,
         final String text) {
 
-        super(parent, title, 0, 0, 44, 20, RESIZABLE);
-        textField = addText(text, 1, 1, 40, 16);
+        super(parent, title, 0, 0, 44, 22, RESIZABLE);
+        textField = addText(text, 1, 3, 40, 16);
+
+        addButton("&Left", 1, 1, new TAction() {
+                public void DO() {
+                    textField.leftJustify();
+                }
+        });
+
+        addButton("&Center", 10, 1, new TAction() {
+                public void DO() {
+                    textField.centerJustify();
+                }
+        });
+
+        addButton("&Right", 21, 1, new TAction() {
+                public void DO() {
+                    textField.rightJustify();
+                }
+        });
+
+        addButton("&Full", 31, 1, new TAction() {
+                public void DO() {
+                    textField.fullJustify();
+                }
+        });
 
         statusBar = newStatusBar("Reflowable text window");
         statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
@@ -75,17 +107,21 @@ public class DemoTextWindow extends TWindow {
 "\n" +
 "Notice that some menu items should be disabled when this window has focus.\n" +
 "\n" +
-"This library implements a text-based windowing system loosely\n" +
-"reminiscient of Borland's [Turbo\n" +
-"Vision](http://en.wikipedia.org/wiki/Turbo_Vision) library.  For those\n" +
-"wishing to use the actual C++ Turbo Vision library, see [Sergio\n" +
-"Sigala's updated version](http://tvision.sourceforge.net/) that runs\n" +
+"This library implements a text-based windowing system loosely " +
+"reminiscient of Borland's [Turbo " +
+"Vision](http://en.wikipedia.org/wiki/Turbo_Vision) library.  For those " +
+"wishing to use the actual C++ Turbo Vision library, see [Sergio " +
+"Sigala's updated version](http://tvision.sourceforge.net/) that runs " +
 "on many more platforms.\n" +
 "\n" +
-"This library is licensed MIT.  See the file LICENSE for the full license\n" +
+"This library is licensed MIT.  See the file LICENSE for the full license " +
 "for the details.\n");
 
     }
+
+    // ------------------------------------------------------------------------
+    // TWindow ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Handle window/screen resize events.
@@ -96,9 +132,9 @@ public class DemoTextWindow extends TWindow {
     public void onResize(final TResizeEvent event) {
         if (event.getType() == TResizeEvent.Type.WIDGET) {
             // Resize the text field
-            textField.setWidth(event.getWidth() - 4);
-            textField.setHeight(event.getHeight() - 4);
-            textField.reflow();
+            TResizeEvent textSize = new TResizeEvent(TResizeEvent.Type.WIDGET,
+                event.getWidth() - 4, event.getHeight() - 6);
+            textField.onResize(textSize);
             return;
         }
 

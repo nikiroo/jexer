@@ -32,6 +32,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -43,12 +44,20 @@ import java.util.TreeMap;
  * ColorTheme is a collection of colors keyed by string.  A default theme is
  * also provided that matches the blue-and-white theme used by Turbo Vision.
  */
-public final class ColorTheme {
+public class ColorTheme {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * The current theme colors.
      */
     private SortedMap<String, CellAttributes> colors;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor sets the theme to the default.
@@ -57,6 +66,10 @@ public final class ColorTheme {
         colors = new TreeMap<String, CellAttributes>();
         setDefaultTheme();
     }
+
+    // ------------------------------------------------------------------------
+    // ColorTheme -------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Retrieve the CellAttributes for a named theme color.
@@ -114,47 +127,115 @@ public final class ColorTheme {
      * @throws IOException if the I/O fails
      */
     public void load(final String filename) throws IOException {
-        BufferedReader reader = new BufferedReader(new FileReader(filename));
-        String line = reader.readLine();
-        for (; line != null; line = reader.readLine()) {
-            String key;
-            String bold;
-            String foreColor;
-            String backColor;
+        load(new FileReader(filename));
+    }
 
+    /**
+     * Set a color based on a text string.  Color text string is of the form:
+     * <code>[ bold ] [ blink ] { foreground on background }</code>
+     *
+     * @param key the color key string
+     * @param text the text string
+     */
+    public void setColorFromString(final String key, final String text) {
+        boolean bold = false;
+        boolean blink = false;
+        String foreColor;
+        String backColor;
+        String token;
+
+        StringTokenizer tokenizer = new StringTokenizer(text);
+        token = tokenizer.nextToken();
+
+        if (token.toLowerCase().equals("rgb:")) {
+            // Foreground
+            int foreColorRGB = -1;
+            try {
+                foreColorRGB = Integer.parseInt(tokenizer.nextToken(), 16);
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+            }
+
+            // "on"
+            if (!tokenizer.nextToken().toLowerCase().equals("on")) {
+                // Invalid line.
+                return;
+            }
+
+            // Background
+            int backColorRGB = -1;
+            try {
+                backColorRGB = Integer.parseInt(tokenizer.nextToken(), 16);
+            } catch (NumberFormatException e) {
+                e.printStackTrace();
+            }
+
+            CellAttributes color = new CellAttributes();
+            color.setForeColorRGB(foreColorRGB);
+            color.setBackColorRGB(backColorRGB);
+            colors.put(key, color);
+            return;
+        }
+
+        while (token.equals("bold") || token.equals("blink")) {
+            if (token.equals("bold")) {
+                bold = true;
+                token = tokenizer.nextToken();
+            }
+            if (token.equals("blink")) {
+                blink = true;
+                token = tokenizer.nextToken();
+            }
+        }
+
+        // What's left is "blah on blah"
+        foreColor = token.toLowerCase();
+
+        if (!tokenizer.nextToken().toLowerCase().equals("on")) {
+            // Invalid line.
+            return;
+        }
+        backColor = tokenizer.nextToken().toLowerCase();
+
+        CellAttributes color = new CellAttributes();
+        if (bold) {
+            color.setBold(true);
+        }
+        if (blink) {
+            color.setBlink(true);
+        }
+        color.setForeColor(Color.getColor(foreColor));
+        color.setBackColor(Color.getColor(backColor));
+        colors.put(key, color);
+    }
+
+    /**
+     * Read color theme mappings from a Reader.  The reader is closed at the
+     * end.
+     *
+     * @param reader the reader to read from
+     * @throws IOException if the I/O fails
+     */
+    public void load(final Reader reader) throws IOException {
+        BufferedReader bufferedReader = new BufferedReader(reader);
+        String line = bufferedReader.readLine();
+        for (; line != null; line = bufferedReader.readLine()) {
             // Look for lines that resemble:
             //     "key = blah on blah"
             //     "key = bold blah on blah"
-            StringTokenizer tokenizer = new StringTokenizer(line);
-            key = tokenizer.nextToken();
-            if (!tokenizer.nextToken().equals("=")) {
-                // Skip this line
+            //     "key = blink bold blah on blah"
+            //     "key = bold blink blah on blah"
+            //     "key = blink blah on blah"
+            if (line.indexOf('=') == -1) {
+                // Invalid line.
                 continue;
             }
-            bold = tokenizer.nextToken();
-            if (!bold.toLowerCase().equals("bold")) {
-                // "key = blah on blah"
-                foreColor = bold;
-            } else {
-                // "key = bold blah on blah"
-                foreColor = tokenizer.nextToken().toLowerCase();
-            }
-            if (!tokenizer.nextToken().toLowerCase().equals("on")) {
-                // Skip this line
-                continue;
-            }
-            backColor = tokenizer.nextToken().toLowerCase();
-
-            CellAttributes color = new CellAttributes();
-            if (bold.equals("bold")) {
-                color.setBold(true);
-            }
-            color.setForeColor(Color.getColor(foreColor));
-            color.setBackColor(Color.getColor(backColor));
-            colors.put(key, color);
+            String key = line.substring(0, line.indexOf(':')).trim();
+            String text = line.substring(line.indexOf(':') + 1);
+            setColorFromString(key, text);
         }
         // All done.
-        reader.close();
+        bufferedReader.close();
     }
 
     /**
@@ -240,12 +321,12 @@ public final class ColorTheme {
         color.setBold(false);
         colors.put("twindow.background.windowmove", color);
 
-        // TApplication background
+        // TDesktop background
         color = new CellAttributes();
         color.setForeColor(Color.BLUE);
         color.setBackColor(Color.WHITE);
         color.setBold(false);
-        colors.put("tapplication.background", color);
+        colors.put("tdesktop.background", color);
 
         // TButton text
         color = new CellAttributes();
@@ -284,7 +365,7 @@ public final class ColorTheme {
         // TText text
         color = new CellAttributes();
         color.setForeColor(Color.WHITE);
-        color.setBackColor(Color.BLACK);
+        color.setBackColor(Color.BLUE);
         color.setBold(false);
         colors.put("ttext", color);
 
@@ -300,7 +381,7 @@ public final class ColorTheme {
         color.setBold(true);
         colors.put("tfield.active", color);
 
-        // TCheckbox
+        // TCheckBox
         color = new CellAttributes();
         color.setForeColor(Color.WHITE);
         color.setBackColor(Color.BLUE);
@@ -312,6 +393,56 @@ public final class ColorTheme {
         color.setBold(true);
         colors.put("tcheckbox.active", color);
 
+        // TComboBox
+        color = new CellAttributes();
+        color.setForeColor(Color.BLACK);
+        color.setBackColor(Color.WHITE);
+        color.setBold(false);
+        colors.put("tcombobox.inactive", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.BLUE);
+        color.setBackColor(Color.CYAN);
+        color.setBold(false);
+        colors.put("tcombobox.active", color);
+
+        // TSpinner
+        color = new CellAttributes();
+        color.setForeColor(Color.BLACK);
+        color.setBackColor(Color.WHITE);
+        color.setBold(false);
+        colors.put("tspinner.inactive", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.BLUE);
+        color.setBackColor(Color.CYAN);
+        color.setBold(false);
+        colors.put("tspinner.active", color);
+
+        // TCalendar
+        color = new CellAttributes();
+        color.setForeColor(Color.WHITE);
+        color.setBackColor(Color.BLUE);
+        color.setBold(false);
+        colors.put("tcalendar.background", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.WHITE);
+        color.setBackColor(Color.BLUE);
+        color.setBold(false);
+        colors.put("tcalendar.day", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.RED);
+        color.setBackColor(Color.WHITE);
+        color.setBold(false);
+        colors.put("tcalendar.day.selected", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.BLUE);
+        color.setBackColor(Color.CYAN);
+        color.setBold(false);
+        colors.put("tcalendar.arrow", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.WHITE);
+        color.setBackColor(Color.BLUE);
+        color.setBold(true);
+        colors.put("tcalendar.title", color);
 
         // TRadioButton
         color = new CellAttributes();
@@ -410,10 +541,18 @@ public final class ColorTheme {
         color.setBold(false);
         colors.put("ttreeview.unreadable", color);
         color = new CellAttributes();
-        color.setForeColor(Color.BLACK);
+        // color.setForeColor(Color.BLACK);
+        // color.setBackColor(Color.BLUE);
+        // color.setBold(true);
+        color.setForeColor(Color.WHITE);
         color.setBackColor(Color.BLUE);
-        color.setBold(true);
+        color.setBold(false);
         colors.put("ttreeview.inactive", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.BLACK);
+        color.setBackColor(Color.WHITE);
+        color.setBold(false);
+        colors.put("ttreeview.selected.inactive", color);
 
         // TList
         color = new CellAttributes();
@@ -432,10 +571,18 @@ public final class ColorTheme {
         color.setBold(false);
         colors.put("tlist.unreadable", color);
         color = new CellAttributes();
-        color.setForeColor(Color.BLACK);
+        // color.setForeColor(Color.BLACK);
+        // color.setBackColor(Color.BLUE);
+        // color.setBold(true);
+        color.setForeColor(Color.WHITE);
         color.setBackColor(Color.BLUE);
-        color.setBold(true);
+        color.setBold(false);
         colors.put("tlist.inactive", color);
+        color = new CellAttributes();
+        color.setForeColor(Color.BLACK);
+        color.setBackColor(Color.WHITE);
+        color.setBold(false);
+        colors.put("tlist.selected.inactive", color);
 
         // TStatusBar
         color = new CellAttributes();
@@ -457,10 +604,20 @@ public final class ColorTheme {
         // TEditor
         color = new CellAttributes();
         color.setForeColor(Color.WHITE);
-        color.setBackColor(Color.BLACK);
+        color.setBackColor(Color.BLUE);
         color.setBold(false);
         colors.put("teditor", color);
 
+    }
+
+    /**
+     * Make human-readable description of this Cell.
+     *
+     * @return displayable String
+     */
+    @Override
+    public String toString() {
+        return colors.toString();
     }
 
 }

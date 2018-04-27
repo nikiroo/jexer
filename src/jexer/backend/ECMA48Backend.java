@@ -33,22 +33,63 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
-import java.util.List;
-
-import jexer.event.TInputEvent;
-import jexer.io.ECMA48Screen;
-import jexer.io.ECMA48Terminal;
 
 /**
  * This class uses an xterm/ANSI X3.64/ECMA-48 type terminal to provide a
  * screen, keyboard, and mouse to TApplication.
  */
-public final class ECMA48Backend extends Backend {
+public class ECMA48Backend extends GenericBackend {
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
-     * Input events are processed by this Terminal.
+     * Public constructor will use System.in and System.out and UTF-8
+     * encoding. On non-Windows systems System.in will be put in raw mode;
+     * shutdown() will (blindly!) put System.in in cooked mode.
+     *
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
      */
-    private ECMA48Terminal terminal;
+    public ECMA48Backend() throws UnsupportedEncodingException {
+        this(null, null, null);
+    }
+
+    /**
+     * Public constructor.
+     *
+     * @param listener the object this backend needs to wake up when new
+     * input comes in
+     * @param input an InputStream connected to the remote user, or null for
+     * System.in.  If System.in is used, then on non-Windows systems it will
+     * be put in raw mode; shutdown() will (blindly!) put System.in in cooked
+     * mode.  input is always converted to a Reader with UTF-8 encoding.
+     * @param output an OutputStream connected to the remote user, or null
+     * for System.out.  output is always converted to a Writer with UTF-8
+     * encoding.
+     * @param windowWidth the number of text columns to start with
+     * @param windowHeight the number of text rows to start with
+     * @param fontSize the size in points.  ECMA48 cannot set it, but it is
+     * here to match the Swing API.
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
+     */
+    public ECMA48Backend(final Object listener, final InputStream input,
+        final OutputStream output, final int windowWidth,
+        final int windowHeight, final int fontSize)
+        throws UnsupportedEncodingException {
+
+        // Create a terminal and explicitly set stdin into raw mode
+        terminal = new ECMA48Terminal(listener, input, output, windowWidth,
+            windowHeight);
+
+        // Keep the terminal's sessionInfo so that TApplication can see it
+        sessionInfo = ((ECMA48Terminal) terminal).getSessionInfo();
+
+        // ECMA48Terminal is the screen too
+        screen = (ECMA48Terminal) terminal;
+    }
 
     /**
      * Public constructor.
@@ -72,14 +113,10 @@ public final class ECMA48Backend extends Backend {
         terminal = new ECMA48Terminal(listener, input, output);
 
         // Keep the terminal's sessionInfo so that TApplication can see it
-        sessionInfo = terminal.getSessionInfo();
+        sessionInfo = ((ECMA48Terminal) terminal).getSessionInfo();
 
-        // Create a screen
-        screen = new ECMA48Screen(terminal);
-
-        // Clear the screen
-        terminal.getOutput().write(terminal.clearAll());
-        terminal.flush();
+        // ECMA48Terminal is the screen too
+        screen = (ECMA48Terminal) terminal;
     }
 
     /**
@@ -105,14 +142,10 @@ public final class ECMA48Backend extends Backend {
             setRawMode);
 
         // Keep the terminal's sessionInfo so that TApplication can see it
-        sessionInfo = terminal.getSessionInfo();
+        sessionInfo = ((ECMA48Terminal) terminal).getSessionInfo();
 
-        // Create a screen
-        screen = new ECMA48Screen(terminal);
-
-        // Clear the screen
-        terminal.getOutput().write(terminal.clearAll());
-        terminal.flush();
+        // ECMA48Terminal is the screen too
+        screen = (ECMA48Terminal) terminal;
     }
 
     /**
@@ -130,44 +163,6 @@ public final class ECMA48Backend extends Backend {
         final Reader reader, final PrintWriter writer) {
 
         this(listener, input, reader, writer, false);
-    }
-
-    /**
-     * Sync the logical screen to the physical device.
-     */
-    @Override
-    public void flushScreen() {
-        screen.flushPhysical();
-    }
-
-    /**
-     * Get keyboard, mouse, and screen resize events.
-     *
-     * @param queue list to append new events to
-     */
-    @Override
-    public void getEvents(final List<TInputEvent> queue) {
-        if (terminal.hasEvents()) {
-            terminal.getEvents(queue);
-        }
-    }
-
-    /**
-     * Close the I/O, restore the console, etc.
-     */
-    @Override
-    public void shutdown() {
-        terminal.shutdown();
-    }
-
-    /**
-     * Set the window title.
-     *
-     * @param title the new title
-     */
-    @Override
-    public void setTitle(final String title) {
-        ((ECMA48Screen) screen).setTitle(title);
     }
 
 }

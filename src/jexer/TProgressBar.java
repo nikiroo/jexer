@@ -34,7 +34,11 @@ import jexer.bits.GraphicsChars;
 /**
  * TProgressBar implements a simple progress bar.
  */
-public final class TProgressBar extends TWidget {
+public class TProgressBar extends TWidget {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Value that corresponds to 0% progress.
@@ -42,68 +46,18 @@ public final class TProgressBar extends TWidget {
     private int minValue = 0;
 
     /**
-     * Get the value that corresponds to 0% progress.
-     *
-     * @return the value that corresponds to 0% progress
-     */
-    public int getMinValue() {
-        return minValue;
-    }
-
-    /**
-     * Set the value that corresponds to 0% progress.
-     *
-     * @param minValue the value that corresponds to 0% progress
-     */
-    public void setMinValue(final int minValue) {
-        this.minValue = minValue;
-    }
-
-    /**
      * Value that corresponds to 100% progress.
      */
     private int maxValue = 100;
-
-    /**
-     * Get the value that corresponds to 100% progress.
-     *
-     * @return the value that corresponds to 100% progress
-     */
-    public int getMaxValue() {
-        return maxValue;
-    }
-
-    /**
-     * Set the value that corresponds to 100% progress.
-     *
-     * @param maxValue the value that corresponds to 100% progress
-     */
-    public void setMaxValue(final int maxValue) {
-        this.maxValue = maxValue;
-    }
 
     /**
      * Current value of the progress.
      */
     private int value = 0;
 
-    /**
-     * Get the current value of the progress.
-     *
-     * @return the current value of the progress
-     */
-    public int getValue() {
-        return value;
-    }
-
-    /**
-     * Set the current value of the progress.
-     *
-     * @param value the current value of the progress
-     */
-    public void setValue(final int value) {
-        this.value = value;
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
@@ -122,6 +76,15 @@ public final class TProgressBar extends TWidget {
 
         this.value = value;
     }
+
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+
+    // ------------------------------------------------------------------------
+    // TWidget ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Draw a static progress bar.
@@ -156,6 +119,64 @@ public final class TProgressBar extends TWidget {
         }
         getScreen().putCharXY(getWidth() - 1, 0, GraphicsChars.CP437[0xB4],
             incompleteColor);
+    }
+
+    // ------------------------------------------------------------------------
+    // TProgressBar -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get the value that corresponds to 0% progress.
+     *
+     * @return the value that corresponds to 0% progress
+     */
+    public int getMinValue() {
+        return minValue;
+    }
+
+    /**
+     * Set the value that corresponds to 0% progress.
+     *
+     * @param minValue the value that corresponds to 0% progress
+     */
+    public void setMinValue(final int minValue) {
+        this.minValue = minValue;
+    }
+
+    /**
+     * Get the value that corresponds to 100% progress.
+     *
+     * @return the value that corresponds to 100% progress
+     */
+    public int getMaxValue() {
+        return maxValue;
+    }
+
+    /**
+     * Set the value that corresponds to 100% progress.
+     *
+     * @param maxValue the value that corresponds to 100% progress
+     */
+    public void setMaxValue(final int maxValue) {
+        this.maxValue = maxValue;
+    }
+
+    /**
+     * Get the current value of the progress.
+     *
+     * @return the current value of the progress
+     */
+    public int getValue() {
+        return value;
+    }
+
+    /**
+     * Set the current value of the progress.
+     *
+     * @param value the current value of the progress
+     */
+    public void setValue(final int value) {
+        this.value = value;
     }
 
 }

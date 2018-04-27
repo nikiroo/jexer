@@ -28,7 +28,11 @@
  */
 package jexer.demos;
 
+import java.io.*;
+import java.util.*;
+
 import jexer.*;
+import jexer.event.*;
 import static jexer.TCommand.*;
 import static jexer.TKeypress.*;
 
@@ -38,21 +42,46 @@ import static jexer.TKeypress.*;
  */
 public class DemoMainWindow extends TWindow {
 
-    // Timer that increments a number.
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Timer that increments a number.
+     */
     private TTimer timer;
 
-    // Timer label is updated with timer ticks.
+    /**
+     * Timer label is updated with timer ticks.
+     */
     TLabel timerLabel;
 
     /**
-     * We need to override onClose so that the timer will no longer be called
-     * after we close the window.  TTimers currently are completely unaware
-     * of the rest of the UI classes.
+     * Timer increment used by the timer loop.  Has to be at class scope so
+     * that it can be accessed by the anonymous TAction class.
      */
-    @Override
-    public void onClose() {
-        getApplication().removeTimer(timer);
-    }
+    int timerI = 0;
+
+    /**
+     * Progress bar used by the timer loop.  Has to be at class scope so that
+     * it can be accessed by the anonymous TAction class.
+     */
+    TProgressBar progressBar;
+
+    /**
+     * Day of week label is updated with TSpinner clicks.
+     */
+    TLabel dayOfWeekLabel;
+
+    /**
+     * Day of week to demonstrate TSpinner.  Has to be at class scope so that
+     * it can be accessed by the anonymous TAction class.
+     */
+    GregorianCalendar calendar = new GregorianCalendar();
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Construct demo window.  It will be centered on screen.
@@ -63,11 +92,6 @@ public class DemoMainWindow extends TWindow {
         this(parent, CENTERED | RESIZABLE);
     }
 
-    // These are used by the timer loop.  They have to be at class scope so
-    // that they can be accessed by the anonymous TAction class.
-    int timerI = 0;
-    TProgressBar progressBar;
-
     /**
      * Constructor.
      *
@@ -77,13 +101,13 @@ public class DemoMainWindow extends TWindow {
     private DemoMainWindow(final TApplication parent, final int flags) {
         // Construct a demo window.  X and Y don't matter because it will be
         // centered on screen.
-        super(parent, "Demo Window", 0, 0, 60, 22, flags);
+        super(parent, "Demo Window", 0, 0, 64, 23, flags);
 
         int row = 1;
 
         // Add some widgets
         addLabel("Message Boxes", 1, row);
-        addButton("&MessageBoxes", 35, row,
+        TWidget first = addButton("&MessageBoxes", 35, row,
             new TAction() {
                 public void DO() {
                     new DemoMsgBoxWindow(getApplication());
@@ -102,7 +126,7 @@ public class DemoMainWindow extends TWindow {
         );
         row += 2;
 
-        addLabel("Text fields", 1, row);
+        addLabel("Text fields and calendar", 1, row);
         addButton("Field&s", 35, row,
             new TAction() {
                 public void DO() {
@@ -112,27 +136,32 @@ public class DemoMainWindow extends TWindow {
         );
         row += 2;
 
-        addLabel("Radio buttons and checkboxes", 1, row);
-        addButton("&Checkboxes", 35, row,
+        addLabel("Radio buttons, check and combobox", 1, row);
+        addButton("&CheckBoxes", 35, row,
             new TAction() {
                 public void DO() {
-                    new DemoCheckboxWindow(getApplication());
+                    new DemoCheckBoxWindow(getApplication());
                 }
             }
         );
         row += 2;
 
-        /*
-        if (!isModal()) {
-            addLabel("Editor window", 1, row);
-            addButton("Edito&r", 35, row,
-                {
-                    new TEditor(application, 0, 0, 60, 15);
+        addLabel("Editor window", 1, row);
+        addButton("&1 Widget", 35, row,
+            new TAction() {
+                public void DO() {
+                    new DemoEditorWindow(getApplication());
                 }
-            );
-        }
+            }
+        );
+        addButton("&2 Window", 48, row,
+            new TAction() {
+                public void DO() {
+                    new TEditorWindow(getApplication());
+                }
+            }
+        );
         row += 2;
-         */
 
         addLabel("Text areas", 1, row);
         addButton("&Text", 35, row,
@@ -189,11 +218,42 @@ public class DemoMainWindow extends TWindow {
                     timerLabel.setWidth(timerLabel.getLabel().length());
                     if (timerI < 100) {
                         timerI++;
+                    } else {
+                        timer.setRecurring(false);
                     }
                     progressBar.setValue(timerI);
                 }
             }
         );
+
+        dayOfWeekLabel = addLabel("Wednesday-", 35, row - 1, "tmenu", false);
+        dayOfWeekLabel.setLabel(String.format("%-10s",
+                calendar.getDisplayName(Calendar.DAY_OF_WEEK,
+                    Calendar.LONG, Locale.getDefault())));
+
+        addSpinner(35 + dayOfWeekLabel.getWidth(), row - 1,
+            new TAction() {
+                public void DO() {
+                    calendar.add(Calendar.DAY_OF_WEEK, 1);
+                    dayOfWeekLabel.setLabel(String.format("%-10s",
+                            calendar.getDisplayName(
+                            Calendar.DAY_OF_WEEK, Calendar.LONG,
+                            Locale.getDefault())));
+                }
+            },
+            new TAction() {
+                public void DO() {
+                    calendar.add(Calendar.DAY_OF_WEEK, -1);
+                    dayOfWeekLabel.setLabel(String.format("%-10s",
+                            calendar.getDisplayName(
+                            Calendar.DAY_OF_WEEK, Calendar.LONG,
+                            Locale.getDefault())));
+                }
+            }
+        );
+
+
+        activate(first);
 
         statusBar = newStatusBar("Demo Main Window");
         statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
@@ -201,4 +261,48 @@ public class DemoMainWindow extends TWindow {
         statusBar.addShortcutKeypress(kbF3, cmOpen, "Open");
         statusBar.addShortcutKeypress(kbF10, cmExit, "Exit");
     }
+
+    // ------------------------------------------------------------------------
+    // TWindow ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * We need to override onClose so that the timer will no longer be called
+     * after we close the window.  TTimers currently are completely unaware
+     * of the rest of the UI classes.
+     */
+    @Override
+    public void onClose() {
+        getApplication().removeTimer(timer);
+    }
+
+    /**
+     * Method that subclasses can override to handle posted command events.
+     *
+     * @param command command event
+     */
+    @Override
+    public void onCommand(final TCommandEvent command) {
+        if (command.equals(cmOpen)) {
+            try {
+                String filename = fileOpenBox(".");
+                if (filename != null) {
+                    try {
+                        new TEditorWindow(getApplication(), new File(filename));
+                    } catch (IOException e) {
+                        messageBox("Error", "Error reading file: " +
+                            e.getMessage());
+                    }
+                }
+            } catch (IOException e) {
+                messageBox("Error", "Error opening file dialog: " +
+                    e.getMessage());
+            }
+            return;
+        }
+
+        // Didn't handle it, let children get it instead
+        super.onCommand(command);
+    }
+
 }

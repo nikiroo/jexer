@@ -26,32 +26,17 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
-package jexer.session;
-
-import java.awt.Frame;
-import java.awt.Insets;
+package jexer.backend;
 
 /**
- * SwingSessionInfo provides a session implementation with a callback into an
- * Swing Frame to support queryWindowSize().  The username is blank, language
- * is "en_US", with a 132x40 text window.
+ * TSessionInfo provides a default session implementation.  The username is
+ * blank, language is "en_US", with a 80x24 text window.
  */
-public final class SwingSessionInfo implements SessionInfo {
+public class TSessionInfo implements SessionInfo {
 
-    /**
-     * The Swing Frame.
-     */
-    private Frame frame;
-
-    /**
-     * The width of a text cell in pixels.
-     */
-    private int textWidth;
-
-    /**
-     * The height of a text cell in pixels.
-     */
-    private int textHeight;
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * User name.
@@ -71,7 +56,33 @@ public final class SwingSessionInfo implements SessionInfo {
     /**
      * Text window height.
      */
-    private int windowHeight = 25;
+    private int windowHeight = 24;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Public constructor.
+     */
+    public TSessionInfo() {
+        this(80, 24);
+    }
+
+    /**
+     * Public constructor.
+     *
+     * @param width the number of columns
+     * @param height the number of rows
+     */
+    public TSessionInfo(final int width, final int height) {
+        this.windowWidth        = width;
+        this.windowHeight       = height;
+    }
+
+    // ------------------------------------------------------------------------
+    // SessionInfo ------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Username getter.
@@ -128,36 +139,10 @@ public final class SwingSessionInfo implements SessionInfo {
     }
 
     /**
-     * Public constructor.
-     *
-     * @param frame the Swing Frame
-     * @param textWidth the width of a cell in pixels
-     * @param textHeight the height of a cell in pixels
-     */
-    public SwingSessionInfo(final Frame frame, final int textWidth,
-        final int textHeight) {
-
-        this.frame      = frame;
-        this.textWidth  = textWidth;
-        this.textHeight = textHeight;
-    }
-
-    /**
      * Re-query the text window size.
      */
     public void queryWindowSize() {
-        Insets insets = frame.getInsets();
-        int height = frame.getHeight() - insets.top - insets.bottom;
-        int width = frame.getWidth() - insets.left - insets.right;
-        windowWidth = width / textWidth;
-        windowHeight = height / textHeight;
-
-        /*
-        System.err.printf("queryWindowSize(): frame %d %d window %d %d\n",
-            frame.getWidth(), frame.getHeight(),
-            windowWidth, windowHeight);
-         */
-
+        // NOP
     }
 
 }
