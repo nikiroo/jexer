@@ -26,12 +26,11 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
-package jexer.session;
+package jexer.backend;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.IOException;
-import java.util.Date;
 import java.util.StringTokenizer;
 
 /**
@@ -39,7 +38,11 @@ import java.util.StringTokenizer;
  * the session information.  The username is taken from user.name, language
  * is taken from user.language, and text window size from 'stty size'.
  */
-public final class TTYSessionInfo implements SessionInfo {
+public class TTYSessionInfo implements SessionInfo {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * User name.
@@ -64,7 +67,25 @@ public final class TTYSessionInfo implements SessionInfo {
     /**
      * Time at which the window size was refreshed.
      */
-    private Date lastQueryWindowTime;
+    private long lastQueryWindowTime;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Public constructor.
+     */
+    public TTYSessionInfo() {
+        // Populate lang and user from the environment
+        username = System.getProperty("user.name");
+        language = System.getProperty("user.language");
+        queryWindowSize();
+    }
+
+    // ------------------------------------------------------------------------
+    // SessionInfo ------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Username getter.
@@ -101,6 +122,60 @@ public final class TTYSessionInfo implements SessionInfo {
     public void setLanguage(final String language) {
         this.language = language;
     }
+
+    /**
+     * Text window width getter.
+     *
+     * @return the window width
+     */
+    public int getWindowWidth() {
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            // Always use 80x25 for Windows (same as DOS)
+            return 80;
+        }
+        return windowWidth;
+    }
+
+    /**
+     * Text window height getter.
+     *
+     * @return the window height
+     */
+    public int getWindowHeight() {
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            // Always use 80x25 for Windows (same as DOS)
+            return 25;
+        }
+        return windowHeight;
+    }
+
+    /**
+     * Re-query the text window size.
+     */
+    public void queryWindowSize() {
+        if (lastQueryWindowTime == 0) {
+            lastQueryWindowTime = System.currentTimeMillis();
+        } else {
+            long nowTime = System.currentTimeMillis();
+            if (nowTime - lastQueryWindowTime < 1000) {
+                // Don't re-spawn stty if it hasn't been a full second since
+                // the last time.
+                return;
+            }
+        }
+        if (System.getProperty("os.name").startsWith("Linux")
+            || System.getProperty("os.name").startsWith("Mac OS X")
+            || System.getProperty("os.name").startsWith("SunOS")
+            || System.getProperty("os.name").startsWith("FreeBSD")
+        ) {
+            // Use stty to get the window size
+            sttyWindowSize();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // TTYSessionInfo ---------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Call 'stty size' to obtain the tty window size.  windowWidth and
@@ -150,62 +225,4 @@ public final class TTYSessionInfo implements SessionInfo {
         }
     }
 
-    /**
-     * Text window width getter.
-     *
-     * @return the window width
-     */
-    public int getWindowWidth() {
-        if (System.getProperty("os.name").startsWith("Windows")) {
-            // Always use 80x25 for Windows (same as DOS)
-            return 80;
-        }
-        return windowWidth;
-    }
-
-    /**
-     * Text window height getter.
-     *
-     * @return the window height
-     */
-    public int getWindowHeight() {
-        if (System.getProperty("os.name").startsWith("Windows")) {
-            // Always use 80x25 for Windows (same as DOS)
-            return 25;
-        }
-        return windowHeight;
-    }
-
-    /**
-     * Re-query the text window size.
-     */
-    public void queryWindowSize() {
-        if (lastQueryWindowTime == null) {
-            lastQueryWindowTime = new Date();
-        } else {
-            Date now = new Date();
-            if (now.getTime() - lastQueryWindowTime.getTime() < 3000) {
-                // Don't re-spawn stty, it's been too soon.
-                return;
-            }
-        }
-        if (System.getProperty("os.name").startsWith("Linux")
-            || System.getProperty("os.name").startsWith("Mac OS X")
-            || System.getProperty("os.name").startsWith("SunOS")
-            || System.getProperty("os.name").startsWith("FreeBSD")
-        ) {
-            // Use stty to get the window size
-            sttyWindowSize();
-        }
-    }
-
-    /**
-     * Public constructor.
-     */
-    public TTYSessionInfo() {
-        // Populate lang and user from the environment
-        username = System.getProperty("user.name");
-        language = System.getProperty("user.language");
-        queryWindowSize();
-    }
 }

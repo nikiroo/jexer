@@ -28,6 +28,7 @@
  */
 package jexer.tterminal;
 
+import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -89,6 +90,10 @@ import static jexer.TKeypress.*;
  */
 public class ECMA48 implements Runnable {
 
+    // ------------------------------------------------------------------------
+    // Constants --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * The emulator can emulate several kinds of terminals.
      */
@@ -115,281 +120,9 @@ public class ECMA48 implements Runnable {
     }
 
     /**
-     * Return the proper primary Device Attributes string.
-     *
-     * @return string to send to remote side that is appropriate for the
-     * this.type
-     */
-    private String deviceTypeResponse() {
-        switch (type) {
-        case VT100:
-            // "I am a VT100 with advanced video option" (often VT102)
-            return "\033[?1;2c";
-
-        case VT102:
-            // "I am a VT102"
-            return "\033[?6c";
-
-        case VT220:
-        case XTERM:
-            // "I am a VT220" - 7 bit version
-            if (!s8c1t) {
-                return "\033[?62;1;6c";
-            }
-            // "I am a VT220" - 8 bit version
-            return "\u009b?62;1;6c";
-        default:
-            throw new IllegalArgumentException("Invalid device type: " + type);
-        }
-    }
-
-    /**
-     * Return the proper TERM environment variable for this device type.
-     *
-     * @param deviceType DeviceType.VT100, DeviceType, XTERM, etc.
-     * @return "vt100", "xterm", etc.
-     */
-    public static String deviceTypeTerm(final DeviceType deviceType) {
-        switch (deviceType) {
-        case VT100:
-            return "vt100";
-
-        case VT102:
-            return "vt102";
-
-        case VT220:
-            return "vt220";
-
-        case XTERM:
-            return "xterm";
-
-        default:
-            throw new IllegalArgumentException("Invalid device type: "
-                + deviceType);
-        }
-    }
-
-    /**
-     * Return the proper LANG for this device type.  Only XTERM devices know
-     * about UTF-8, the others are defined by their standard to be either
-     * 7-bit or 8-bit characters only.
-     *
-     * @param deviceType DeviceType.VT100, DeviceType, XTERM, etc.
-     * @param baseLang a base language without UTF-8 flag such as "C" or
-     * "en_US"
-     * @return "en_US", "en_US.UTF-8", etc.
-     */
-    public static String deviceTypeLang(final DeviceType deviceType,
-        final String baseLang) {
-
-        switch (deviceType) {
-
-        case VT100:
-        case VT102:
-        case VT220:
-            return baseLang;
-
-        case XTERM:
-            return baseLang + ".UTF-8";
-
-        default:
-            throw new IllegalArgumentException("Invalid device type: "
-                + deviceType);
-        }
-    }
-
-    /**
-     * Write a string directly to the remote side.
-     *
-     * @param str string to send
-     */
-    private void writeRemote(final String str) {
-        if (stopReaderThread) {
-            // Reader hit EOF, bail out now.
-            close();
-            return;
-        }
-
-        // System.err.printf("writeRemote() '%s'\n", str);
-
-        switch (type) {
-        case VT100:
-        case VT102:
-        case VT220:
-            if (outputStream == null) {
-                return;
-            }
-            try {
-                for (int i = 0; i < str.length(); i++) {
-                    outputStream.write(str.charAt(i));
-                }
-                outputStream.flush();
-            } catch (IOException e) {
-                // Assume EOF
-                close();
-            }
-            break;
-        case XTERM:
-            if (output == null) {
-                return;
-            }
-            try {
-                output.write(str);
-                output.flush();
-            } catch (IOException e) {
-                // Assume EOF
-                close();
-            }
-            break;
-        default:
-            throw new IllegalArgumentException("Invalid device type: " + type);
-        }
-    }
-
-    /**
-     * Close the input and output streams and stop the reader thread.  Note
-     * that it is safe to call this multiple times.
-     */
-    public final void close() {
-
-        // Tell the reader thread to stop looking at input.  It will close
-        // the input streams.
-        if (stopReaderThread == false) {
-            stopReaderThread = true;
-            try {
-                readerThread.join(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // Now close the output stream.
-        switch (type) {
-        case VT100:
-        case VT102:
-        case VT220:
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                } catch (IOException e) {
-                    // SQUASH
-                }
-                outputStream = null;
-            }
-            break;
-        case XTERM:
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                } catch (IOException e) {
-                    // SQUASH
-                }
-                outputStream = null;
-            }
-            if (output != null) {
-                try {
-                    output.close();
-                } catch (IOException e) {
-                    // SQUASH
-                }
-                output = null;
-            }
-            break;
-        default:
-            throw new IllegalArgumentException("Invalid device type: " +
-                type);
-        }
-    }
-
-    /**
-     * When true, the reader thread is expected to exit.
-     */
-    private volatile boolean stopReaderThread = false;
-
-    /**
-     * The reader thread.
-     */
-    private Thread readerThread = null;
-
-    /**
-     * See if the reader thread is still running.
-     *
-     * @return if true, we are still connected to / reading from the remote
-     * side
-     */
-    public final boolean isReading() {
-        return (!stopReaderThread);
-    }
-
-    /**
-     * The type of emulator to be.
-     */
-    private DeviceType type = DeviceType.VT102;
-
-    /**
-     * Obtain a new blank display line for an external user
-     * (e.g. TTerminalWindow).
-     *
-     * @return new blank line
-     */
-    public final DisplayLine getBlankDisplayLine() {
-        return new DisplayLine(currentState.attr);
-    }
-
-    /**
-     * The scrollback buffer characters + attributes.
-     */
-    private volatile List<DisplayLine> scrollback;
-
-    /**
-     * Get the scrollback buffer.
-     *
-     * @return the scrollback buffer
-     */
-    public final List<DisplayLine> getScrollbackBuffer() {
-        return scrollback;
-    }
-
-    /**
-     * The raw display buffer characters + attributes.
-     */
-    private volatile List<DisplayLine> display;
-
-    /**
-     * Get the display buffer.
-     *
-     * @return the display buffer
-     */
-    public final List<DisplayLine> getDisplayBuffer() {
-        return display;
-    }
-
-    /**
-     * The terminal's input.  For type == XTERM, this is an InputStreamReader
-     * with UTF-8 encoding.
-     */
-    private Reader input;
-
-    /**
-     * The terminal's raw InputStream.  This is used for type != XTERM.
-     */
-    private volatile TimeoutInputStream inputStream;
-
-    /**
-     * The terminal's output.  For type == XTERM, this wraps an
-     * OutputStreamWriter with UTF-8 encoding.
-     */
-    private Writer output;
-
-    /**
-     * The terminal's raw OutputStream.  This is used for type != XTERM.
-     */
-    private OutputStream outputStream;
-
-    /**
      * Parser character scan states.
      */
-    enum ScanState {
+    private enum ScanState {
         GROUND,
         ESCAPE,
         ESCAPE_INTERMEDIATE,
@@ -406,11 +139,6 @@ public class ECMA48 implements Runnable {
         OSC_STRING,
         VT52_DIRECT_CURSOR_ADDRESS
     }
-
-    /**
-     * Current scanning state.
-     */
-    private ScanState scanState;
 
     /**
      * The selected number pad mode (DECKPAM, DECKPNM).  We record this, but
@@ -489,11 +217,6 @@ public class ECMA48 implements Runnable {
     }
 
     /**
-     * Which mouse protocol is active.
-     */
-    private MouseProtocol mouseProtocol = MouseProtocol.OFF;
-
-    /**
      * XTERM mouse reporting encodings.
      */
     private enum MouseEncoding {
@@ -501,6 +224,72 @@ public class ECMA48 implements Runnable {
         UTF8,
         SGR
     }
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * The enclosing listening object.
+     */
+    private DisplayListener displayListener;
+
+    /**
+     * When true, the reader thread is expected to exit.
+     */
+    private volatile boolean stopReaderThread = false;
+
+    /**
+     * The reader thread.
+     */
+    private Thread readerThread = null;
+
+    /**
+     * The type of emulator to be.
+     */
+    private DeviceType type = DeviceType.VT102;
+
+    /**
+     * The scrollback buffer characters + attributes.
+     */
+    private volatile List<DisplayLine> scrollback;
+
+    /**
+     * The raw display buffer characters + attributes.
+     */
+    private volatile List<DisplayLine> display;
+
+    /**
+     * The terminal's input.  For type == XTERM, this is an InputStreamReader
+     * with UTF-8 encoding.
+     */
+    private Reader input;
+
+    /**
+     * The terminal's raw InputStream.  This is used for type != XTERM.
+     */
+    private volatile TimeoutInputStream inputStream;
+
+    /**
+     * The terminal's output.  For type == XTERM, this wraps an
+     * OutputStreamWriter with UTF-8 encoding.
+     */
+    private Writer output;
+
+    /**
+     * The terminal's raw OutputStream.  This is used for type != XTERM.
+     */
+    private OutputStream outputStream;
+
+    /**
+     * Current scanning state.
+     */
+    private ScanState scanState;
+
+    /**
+     * Which mouse protocol is active.
+     */
+    private MouseProtocol mouseProtocol = MouseProtocol.OFF;
 
     /**
      * Which mouse encoding is active.
@@ -514,28 +303,10 @@ public class ECMA48 implements Runnable {
     private int width;
 
     /**
-     * Get the display width.
-     *
-     * @return the width (usually 80 or 132)
-     */
-    public final int getWidth() {
-        return width;
-    }
-
-    /**
      * Physical display height.  We start at 80x24, but the user can resize
      * us bigger/smaller.
      */
     private int height;
-
-    /**
-     * Get the display height.
-     *
-     * @return the height (usually 24)
-     */
-    public final int getHeight() {
-        return height;
-    }
 
     /**
      * Top margin of the scrolling region.
@@ -587,30 +358,10 @@ public class ECMA48 implements Runnable {
     private boolean cursorVisible = true;
 
     /**
-     * Get visible cursor flag.
-     *
-     * @return if true, the cursor is visible
-     */
-    public final boolean isCursorVisible() {
-        return cursorVisible;
-    }
-
-    /**
      * Screen title as set by the xterm OSC sequence.  Lots of applications
      * send a screenTitle regardless of whether it is an xterm client or not.
      */
     private String screenTitle = "";
-
-    /**
-     * Get the screen title as set by the xterm OSC sequence.  Lots of
-     * applications send a screenTitle regardless of whether it is an xterm
-     * client or not.
-     *
-     * @return screen title
-     */
-    public final String getScreenTitle() {
-        return screenTitle;
-    }
 
     /**
      * Parameter characters being collected.
@@ -668,15 +419,6 @@ public class ECMA48 implements Runnable {
     private boolean columns132 = false;
 
     /**
-     * Get 132 columns value.
-     *
-     * @return if true, the terminal is in 132 column mode
-     */
-    public final boolean isColumns132() {
-                return columns132;
-        }
-
-    /**
      * true = reverse video.  Set by DECSCNM.
      */
     private boolean reverseVideo = false;
@@ -685,6 +427,21 @@ public class ECMA48 implements Runnable {
      * false = echo characters locally.
      */
     private boolean fullDuplex = true;
+
+    /**
+     * The current terminal state.
+     */
+    private SaveableState currentState;
+
+    /**
+     * The last saved terminal state.
+     */
+    private SaveableState savedState;
+
+    /**
+     * The 88- or 256-color support RGB colors.
+     */
+    private List<Integer> colors88;
 
     /**
      * DECSC/DECRC save/restore a subset of the total state.  This class
@@ -799,15 +556,512 @@ public class ECMA48 implements Runnable {
         }
     }
 
-    /**
-     * The current terminal state.
-     */
-    private SaveableState currentState;
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
-     * The last saved terminal state.
+     * Public constructor.
+     *
+     * @param type one of the DeviceType constants to select VT100, VT102,
+     * VT220, or XTERM
+     * @param inputStream an InputStream connected to the remote side.  For
+     * type == XTERM, inputStream is converted to a Reader with UTF-8
+     * encoding.
+     * @param outputStream an OutputStream connected to the remote user.  For
+     * type == XTERM, outputStream is converted to a Writer with UTF-8
+     * encoding.
+     * @param displayListener a callback to the outer display, or null for
+     * default VT100 behavior
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
      */
-    private SaveableState savedState;
+    public ECMA48(final DeviceType type, final InputStream inputStream,
+        final OutputStream outputStream, final DisplayListener displayListener)
+        throws UnsupportedEncodingException {
+
+        assert (inputStream != null);
+        assert (outputStream != null);
+
+        csiParams         = new ArrayList<Integer>();
+        tabStops          = new ArrayList<Integer>();
+        scrollback        = new LinkedList<DisplayLine>();
+        display           = new LinkedList<DisplayLine>();
+
+        this.type         = type;
+        if (inputStream instanceof TimeoutInputStream) {
+            this.inputStream  = (TimeoutInputStream)inputStream;
+        } else {
+            this.inputStream  = new TimeoutInputStream(inputStream, 2000);
+        }
+        if (type == DeviceType.XTERM) {
+            this.input    = new InputStreamReader(this.inputStream, "UTF-8");
+            this.output   = new OutputStreamWriter(new
+                BufferedOutputStream(outputStream), "UTF-8");
+            this.outputStream = null;
+        } else {
+            this.output       = null;
+            this.outputStream = new BufferedOutputStream(outputStream);
+        }
+        this.displayListener  = displayListener;
+
+        reset();
+        for (int i = 0; i < height; i++) {
+            display.add(new DisplayLine(currentState.attr));
+        }
+
+        // Spin up the input reader
+        readerThread = new Thread(this);
+        readerThread.start();
+    }
+
+    // ------------------------------------------------------------------------
+    // Runnable ---------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Read function runs on a separate thread.
+     */
+    public final void run() {
+        boolean utf8 = false;
+        boolean done = false;
+
+        if (type == DeviceType.XTERM) {
+            utf8 = true;
+        }
+
+        // available() will often return > 1, so we need to read in chunks to
+        // stay caught up.
+        char [] readBufferUTF8 = null;
+        byte [] readBuffer = null;
+        if (utf8) {
+            readBufferUTF8 = new char[128];
+        } else {
+            readBuffer = new byte[128];
+        }
+
+        while (!done && !stopReaderThread) {
+            try {
+                int n = inputStream.available();
+
+                // System.err.printf("available() %d\n", n); System.err.flush();
+                if (utf8) {
+                    if (readBufferUTF8.length < n) {
+                        // The buffer wasn't big enough, make it huger
+                        int newSizeHalf = Math.max(readBufferUTF8.length,
+                            n);
+
+                        readBufferUTF8 = new char[newSizeHalf * 2];
+                    }
+                } else {
+                    if (readBuffer.length < n) {
+                        // The buffer wasn't big enough, make it huger
+                        int newSizeHalf = Math.max(readBuffer.length, n);
+                        readBuffer = new byte[newSizeHalf * 2];
+                    }
+                }
+                if (n == 0) {
+                    try {
+                        Thread.sleep(2);
+                    } catch (InterruptedException e) {
+                        // SQUASH
+                    }
+                    continue;
+                }
+
+                int rc = -1;
+                try {
+                    if (utf8) {
+                        rc = input.read(readBufferUTF8, 0,
+                            readBufferUTF8.length);
+                    } else {
+                        rc = inputStream.read(readBuffer, 0,
+                            readBuffer.length);
+                    }
+                } catch (ReadTimeoutException e) {
+                    rc = 0;
+                }
+
+                // System.err.printf("read() %d\n", rc); System.err.flush();
+                if (rc == -1) {
+                    // This is EOF
+                    done = true;
+                } else {
+                    // Don't step on UI events
+                    synchronized (this) {
+                        for (int i = 0; i < rc; i++) {
+                            int ch = 0;
+                            if (utf8) {
+                                ch = readBufferUTF8[i];
+                            } else {
+                                ch = readBuffer[i];
+                            }
+
+                            consume((char)ch);
+                        }
+                    }
+                    // Permit my enclosing UI to know that I updated.
+                    if (displayListener != null) {
+                        displayListener.displayChanged();
+                    }
+                }
+                // System.err.println("end while loop"); System.err.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+                done = true;
+            }
+
+        } // while ((done == false) && (stopReaderThread == false))
+
+        // Let the rest of the world know that I am done.
+        stopReaderThread = true;
+
+        try {
+            inputStream.cancelRead();
+            inputStream.close();
+            inputStream = null;
+        } catch (IOException e) {
+            // SQUASH
+        }
+        try {
+            input.close();
+            input = null;
+        } catch (IOException e) {
+            // SQUASH
+        }
+
+        // Permit my enclosing UI to know that I updated.
+        if (displayListener != null) {
+            displayListener.displayChanged();
+        }
+
+        // System.err.println("*** run() exiting..."); System.err.flush();
+    }
+
+    // ------------------------------------------------------------------------
+    // ECMA48 -----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Return the proper primary Device Attributes string.
+     *
+     * @return string to send to remote side that is appropriate for the
+     * this.type
+     */
+    private String deviceTypeResponse() {
+        switch (type) {
+        case VT100:
+            // "I am a VT100 with advanced video option" (often VT102)
+            return "\033[?1;2c";
+
+        case VT102:
+            // "I am a VT102"
+            return "\033[?6c";
+
+        case VT220:
+        case XTERM:
+            // "I am a VT220" - 7 bit version
+            if (!s8c1t) {
+                return "\033[?62;1;6c";
+            }
+            // "I am a VT220" - 8 bit version
+            return "\u009b?62;1;6c";
+        default:
+            throw new IllegalArgumentException("Invalid device type: " + type);
+        }
+    }
+
+    /**
+     * Return the proper TERM environment variable for this device type.
+     *
+     * @param deviceType DeviceType.VT100, DeviceType, XTERM, etc.
+     * @return "vt100", "xterm", etc.
+     */
+    public static String deviceTypeTerm(final DeviceType deviceType) {
+        switch (deviceType) {
+        case VT100:
+            return "vt100";
+
+        case VT102:
+            return "vt102";
+
+        case VT220:
+            return "vt220";
+
+        case XTERM:
+            return "xterm";
+
+        default:
+            throw new IllegalArgumentException("Invalid device type: "
+                + deviceType);
+        }
+    }
+
+    /**
+     * Return the proper LANG for this device type.  Only XTERM devices know
+     * about UTF-8, the others are defined by their standard to be either
+     * 7-bit or 8-bit characters only.
+     *
+     * @param deviceType DeviceType.VT100, DeviceType, XTERM, etc.
+     * @param baseLang a base language without UTF-8 flag such as "C" or
+     * "en_US"
+     * @return "en_US", "en_US.UTF-8", etc.
+     */
+    public static String deviceTypeLang(final DeviceType deviceType,
+        final String baseLang) {
+
+        switch (deviceType) {
+
+        case VT100:
+        case VT102:
+        case VT220:
+            return baseLang;
+
+        case XTERM:
+            return baseLang + ".UTF-8";
+
+        default:
+            throw new IllegalArgumentException("Invalid device type: "
+                + deviceType);
+        }
+    }
+
+    /**
+     * Write a string directly to the remote side.
+     *
+     * @param str string to send
+     */
+    public void writeRemote(final String str) {
+        if (stopReaderThread) {
+            // Reader hit EOF, bail out now.
+            close();
+            return;
+        }
+
+        // System.err.printf("writeRemote() '%s'\n", str);
+
+        switch (type) {
+        case VT100:
+        case VT102:
+        case VT220:
+            if (outputStream == null) {
+                return;
+            }
+            try {
+                outputStream.flush();
+                for (int i = 0; i < str.length(); i++) {
+                    outputStream.write(str.charAt(i));
+                }
+                outputStream.flush();
+            } catch (IOException e) {
+                // Assume EOF
+                close();
+            }
+            break;
+        case XTERM:
+            if (output == null) {
+                return;
+            }
+            try {
+                output.flush();
+                output.write(str);
+                output.flush();
+            } catch (IOException e) {
+                // Assume EOF
+                close();
+            }
+            break;
+        default:
+            throw new IllegalArgumentException("Invalid device type: " + type);
+        }
+    }
+
+    /**
+     * Close the input and output streams and stop the reader thread.  Note
+     * that it is safe to call this multiple times.
+     */
+    public final void close() {
+
+        // Tell the reader thread to stop looking at input.  It will close
+        // the input streams.
+        if (stopReaderThread == false) {
+            stopReaderThread = true;
+            try {
+                readerThread.join(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Now close the output stream.
+        switch (type) {
+        case VT100:
+        case VT102:
+        case VT220:
+            if (outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    // SQUASH
+                }
+                outputStream = null;
+            }
+            break;
+        case XTERM:
+            if (outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    // SQUASH
+                }
+                outputStream = null;
+            }
+            if (output != null) {
+                try {
+                    output.close();
+                } catch (IOException e) {
+                    // SQUASH
+                }
+                output = null;
+            }
+            break;
+        default:
+            throw new IllegalArgumentException("Invalid device type: " +
+                type);
+        }
+    }
+
+    /**
+     * See if the reader thread is still running.
+     *
+     * @return if true, we are still connected to / reading from the remote
+     * side
+     */
+    public final boolean isReading() {
+        return (!stopReaderThread);
+    }
+
+    /**
+     * Obtain a new blank display line for an external user
+     * (e.g. TTerminalWindow).
+     *
+     * @return new blank line
+     */
+    public final DisplayLine getBlankDisplayLine() {
+        return new DisplayLine(currentState.attr);
+    }
+
+    /**
+     * Get the scrollback buffer.
+     *
+     * @return the scrollback buffer
+     */
+    public final List<DisplayLine> getScrollbackBuffer() {
+        return scrollback;
+    }
+
+    /**
+     * Get the display buffer.
+     *
+     * @return the display buffer
+     */
+    public final List<DisplayLine> getDisplayBuffer() {
+        return display;
+    }
+
+    /**
+     * Get the display width.
+     *
+     * @return the width (usually 80 or 132)
+     */
+    public final int getWidth() {
+        return width;
+    }
+
+    /**
+     * Set the display width.
+     *
+     * @param width the new width
+     */
+    public final void setWidth(final int width) {
+        this.width = width;
+        rightMargin = width - 1;
+        if (currentState.cursorX >= width) {
+            currentState.cursorX = width - 1;
+        }
+        if (savedState.cursorX >= width) {
+            savedState.cursorX = width - 1;
+        }
+    }
+
+    /**
+     * Get the display height.
+     *
+     * @return the height (usually 24)
+     */
+    public final int getHeight() {
+        return height;
+    }
+
+    /**
+     * Set the display height.
+     *
+     * @param height the new height
+     */
+    public final void setHeight(final int height) {
+        int delta = height - this.height;
+        this.height = height;
+        scrollRegionBottom += delta;
+        if (scrollRegionBottom < 0) {
+            scrollRegionBottom = height;
+        }
+        if (scrollRegionTop >= scrollRegionBottom) {
+            scrollRegionTop = 0;
+        }
+        if (currentState.cursorY >= height) {
+            currentState.cursorY = height - 1;
+        }
+        if (savedState.cursorY >= height) {
+            savedState.cursorY = height - 1;
+        }
+        while (display.size() < height) {
+            DisplayLine line = new DisplayLine(currentState.attr);
+            line.setReverseColor(reverseVideo);
+            display.add(line);
+        }
+        while (display.size() > height) {
+            scrollback.add(display.remove(0));
+        }
+    }
+
+    /**
+     * Get visible cursor flag.
+     *
+     * @return if true, the cursor is visible
+     */
+    public final boolean isCursorVisible() {
+        return cursorVisible;
+    }
+
+    /**
+     * Get the screen title as set by the xterm OSC sequence.  Lots of
+     * applications send a screenTitle regardless of whether it is an xterm
+     * client or not.
+     *
+     * @return screen title
+     */
+    public final String getScreenTitle() {
+        return screenTitle;
+    }
+
+    /**
+     * Get 132 columns value.
+     *
+     * @return if true, the terminal is in 132 column mode
+     */
+    public final boolean isColumns132() {
+        return columns132;
+    }
 
     /**
      * Clear the CSI parameters and flags.
@@ -829,6 +1083,99 @@ public class ECMA48 implements Runnable {
     }
 
     /**
+     * Reset the 88- or 256-colors.
+     */
+    private void resetColors() {
+        colors88 = new ArrayList<Integer>(256);
+        for (int i = 0; i < 256; i++) {
+            colors88.add(0);
+        }
+
+        // Set default system colors.
+        colors88.set(0, 0x00000000);
+        colors88.set(1, 0x00a80000);
+        colors88.set(2, 0x0000a800);
+        colors88.set(3, 0x00a85400);
+        colors88.set(4, 0x000000a8);
+        colors88.set(5, 0x00a800a8);
+        colors88.set(6, 0x0000a8a8);
+        colors88.set(7, 0x00a8a8a8);
+
+        colors88.set(8, 0x00545454);
+        colors88.set(9, 0x00fc5454);
+        colors88.set(10, 0x0054fc54);
+        colors88.set(11, 0x00fcfc54);
+        colors88.set(12, 0x005454fc);
+        colors88.set(13, 0x00fc54fc);
+        colors88.set(14, 0x0054fcfc);
+        colors88.set(15, 0x00fcfcfc);
+    }
+
+    /**
+     * Get the RGB value of one of the indexed colors.
+     *
+     * @param index the color index
+     * @return the RGB value
+     */
+    private int get88Color(final int index) {
+        // System.err.print("get88Color: " + index);
+        if ((index < 0) || (index > colors88.size())) {
+            // System.err.println(" -- UNKNOWN");
+            return 0;
+        }
+        // System.err.printf(" %08x\n", colors88.get(index));
+        return colors88.get(index);
+    }
+
+    /**
+     * Set one of the indexed colors to a color specification.
+     *
+     * @param index the color index
+     * @param spec the specification, typically something like "rgb:aa/bb/cc"
+     */
+    private void set88Color(final int index, final String spec) {
+        // System.err.println("set88Color: " + index + " '" + spec + "'");
+
+        if ((index < 0) || (index > colors88.size())) {
+            return;
+        }
+        if (spec.startsWith("rgb:")) {
+            String [] rgbTokens = spec.substring(4).split("/");
+            if (rgbTokens.length == 3) {
+                try {
+                    int rgb = (Integer.parseInt(rgbTokens[0], 16) << 16);
+                    rgb |= Integer.parseInt(rgbTokens[1], 16) << 8;
+                    rgb |= Integer.parseInt(rgbTokens[2], 16);
+                    // System.err.printf("  set to %08x\n", rgb);
+                    colors88.set(index, rgb);
+                } catch (NumberFormatException e) {
+                    // SQUASH
+                }
+            }
+            return;
+        }
+
+        if (spec.toLowerCase().equals("black")) {
+            colors88.set(index, 0x00000000);
+        } else if (spec.toLowerCase().equals("red")) {
+            colors88.set(index, 0x00a80000);
+        } else if (spec.toLowerCase().equals("green")) {
+            colors88.set(index, 0x0000a800);
+        } else if (spec.toLowerCase().equals("yellow")) {
+            colors88.set(index, 0x00a85400);
+        } else if (spec.toLowerCase().equals("blue")) {
+            colors88.set(index, 0x000000a8);
+        } else if (spec.toLowerCase().equals("magenta")) {
+            colors88.set(index, 0x00a800a8);
+        } else if (spec.toLowerCase().equals("cyan")) {
+            colors88.set(index, 0x0000a8a8);
+        } else if (spec.toLowerCase().equals("white")) {
+            colors88.set(index, 0x00a8a8a8);
+        }
+
+    }
+
+    /**
      * Reset the emulation state.
      */
     private void reset() {
@@ -845,6 +1192,11 @@ public class ECMA48 implements Runnable {
         arrowKeyMode            = ArrowKeyMode.ANSI;
         keypadMode              = KeypadMode.Numeric;
         wrapLineFlag            = false;
+        if (displayListener != null) {
+            width = displayListener.getDisplayWidth();
+            height = displayListener.getDisplayHeight();
+            rightMargin         = width - 1;
+        }
 
         // Flags
         shiftOut                = false;
@@ -868,58 +1220,11 @@ public class ECMA48 implements Runnable {
         // Tab stops
         resetTabStops();
 
+        // Reset extra colors
+        resetColors();
+
         // Clear CSI stuff
         toGround();
-    }
-
-    /**
-     * Public constructor.
-     *
-     * @param type one of the DeviceType constants to select VT100, VT102,
-     * VT220, or XTERM
-     * @param inputStream an InputStream connected to the remote side.  For
-     * type == XTERM, inputStream is converted to a Reader with UTF-8
-     * encoding.
-     * @param outputStream an OutputStream connected to the remote user.  For
-     * type == XTERM, outputStream is converted to a Writer with UTF-8
-     * encoding.
-     * @throws UnsupportedEncodingException if an exception is thrown when
-     * creating the InputStreamReader
-     */
-    public ECMA48(final DeviceType type, final InputStream inputStream,
-        final OutputStream outputStream) throws UnsupportedEncodingException {
-
-        assert (inputStream != null);
-        assert (outputStream != null);
-
-        csiParams         = new ArrayList<Integer>();
-        tabStops          = new ArrayList<Integer>();
-        scrollback        = new LinkedList<DisplayLine>();
-        display           = new LinkedList<DisplayLine>();
-
-        this.type         = type;
-        if (inputStream instanceof TimeoutInputStream) {
-            this.inputStream  = (TimeoutInputStream)inputStream;
-        } else {
-            this.inputStream  = new TimeoutInputStream(inputStream, 2000);
-        }
-        if (type == DeviceType.XTERM) {
-            this.input    = new InputStreamReader(this.inputStream, "UTF-8");
-            this.output   = new OutputStreamWriter(outputStream, "UTF-8");
-            this.outputStream = null;
-        } else {
-            this.output       = null;
-            this.outputStream = outputStream;
-        }
-
-        reset();
-        for (int i = 0; i < height; i++) {
-            display.add(new DisplayLine(currentState.attr));
-        }
-
-        // Spin up the input reader
-        readerThread = new Thread(this);
-        readerThread.start();
     }
 
     /**
@@ -1320,7 +1625,7 @@ public class ECMA48 implements Runnable {
             return sb.toString();
         }
 
-        if (keypress.equals(kbBackspace)) {
+        if (keypress.equals(kbBackspaceDel)) {
             switch (type) {
             case VT100:
                 return "\010";
@@ -1796,20 +2101,9 @@ public class ECMA48 implements Runnable {
         if (keypress.equalsWithoutModifiers(kbPgUp)) {
             switch (type) {
             case XTERM:
-                switch (arrowKeyMode) {
-                case ANSI:
-                    return xtermBuildKeySequence("\033[", '5', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT52:
-                    return xtermBuildKeySequence("\033", '5', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT100:
-                    return xtermBuildKeySequence("\033O", '5', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                }
+                return xtermBuildKeySequence("\033[", '5', '~',
+                    keypress.isCtrl(), keypress.isAlt(),
+                    keypress.isShift());
             default:
                 return "\033[5~";
             }
@@ -1818,20 +2112,9 @@ public class ECMA48 implements Runnable {
         if (keypress.equalsWithoutModifiers(kbPgDn)) {
             switch (type) {
             case XTERM:
-                switch (arrowKeyMode) {
-                case ANSI:
-                    return xtermBuildKeySequence("\033[", '6', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT52:
-                    return xtermBuildKeySequence("\033", '6', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT100:
-                    return xtermBuildKeySequence("\033O", '6', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                }
+                return xtermBuildKeySequence("\033[", '6', '~',
+                    keypress.isCtrl(), keypress.isAlt(),
+                    keypress.isShift());
             default:
                 return "\033[6~";
             }
@@ -1840,20 +2123,9 @@ public class ECMA48 implements Runnable {
         if (keypress.equalsWithoutModifiers(kbIns)) {
             switch (type) {
             case XTERM:
-                switch (arrowKeyMode) {
-                case ANSI:
-                    return xtermBuildKeySequence("\033[", '2', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT52:
-                    return xtermBuildKeySequence("\033", '2', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT100:
-                    return xtermBuildKeySequence("\033O", '2', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                }
+                return xtermBuildKeySequence("\033[", '2', '~',
+                    keypress.isCtrl(), keypress.isAlt(),
+                    keypress.isShift());
             default:
                 return "\033[2~";
             }
@@ -1862,20 +2134,9 @@ public class ECMA48 implements Runnable {
         if (keypress.equalsWithoutModifiers(kbDel)) {
             switch (type) {
             case XTERM:
-                switch (arrowKeyMode) {
-                case ANSI:
-                    return xtermBuildKeySequence("\033[", '3', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT52:
-                    return xtermBuildKeySequence("\033", '3', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                case VT100:
-                    return xtermBuildKeySequence("\033O", '3', '~',
-                        keypress.isCtrl(), keypress.isAlt(),
-                        keypress.isShift());
-                }
+                return xtermBuildKeySequence("\033[", '3', '~',
+                    keypress.isCtrl(), keypress.isAlt(),
+                    keypress.isShift());
             default:
                 // Delete sends real delete for VTxxx
                 return "\177";
@@ -2485,9 +2746,18 @@ public class ECMA48 implements Runnable {
                     } else {
                         // 80 columns
                         columns132 = false;
-                        rightMargin = 79;
+                        if ((displayListener != null)
+                            && (type == DeviceType.XTERM)
+                        ) {
+                            // For xterms, reset to the actual width, not 80
+                            // columns.
+                            width = displayListener.getDisplayWidth();
+                            rightMargin = width - 1;
+                        } else {
+                            rightMargin = 79;
+                            width = rightMargin + 1;
+                        }
                     }
-                    width = rightMargin + 1;
                     // Entire screen is cleared, and scrolling region is
                     // reset
                     eraseScreen(0, 0, height - 1, width - 1, false);
@@ -3360,7 +3630,86 @@ public class ECMA48 implements Runnable {
             return;
         }
 
+        int sgrColorMode = -1;
+        boolean idx88Color = false;
+        boolean rgbColor = false;
+        int rgbRed = -1;
+        int rgbGreen = -1;
+
         for (Integer i: csiParams) {
+
+            if ((sgrColorMode == 38) || (sgrColorMode == 48)) {
+
+                assert (type == DeviceType.XTERM);
+
+                if (idx88Color) {
+                    /*
+                     * Indexed color mode, we now have the index number.
+                     */
+                    if (sgrColorMode == 38) {
+                        currentState.attr.setForeColorRGB(get88Color(i));
+                    } else {
+                        assert (sgrColorMode == 48);
+                        currentState.attr.setBackColorRGB(get88Color(i));
+                    }
+                    sgrColorMode = -1;
+                    idx88Color = false;
+                    continue;
+                }
+
+                if (rgbColor) {
+                    /*
+                     * RGB color mode, we are collecting tokens.
+                     */
+                    if (rgbRed == -1) {
+                        rgbRed = i & 0xFF;
+                    } else if (rgbGreen == -1) {
+                        rgbGreen = i & 0xFF;
+                    } else {
+                        int rgb = rgbRed << 16;
+                        rgb |= rgbGreen << 8;
+                        rgb |= i & 0xFF;
+
+                        // System.err.printf("RGB: %08x\n", rgb);
+
+                        if (sgrColorMode == 38) {
+                            currentState.attr.setForeColorRGB(rgb);
+                        } else {
+                            assert (sgrColorMode == 48);
+                            currentState.attr.setBackColorRGB(rgb);
+                        }
+                        rgbRed = -1;
+                        rgbGreen = -1;
+                        sgrColorMode = -1;
+                        rgbColor = false;
+                    }
+                    continue;
+                }
+
+                switch (i) {
+
+                case 2:
+                    /*
+                     * RGB color mode.
+                     */
+                    rgbColor = true;
+                    break;
+
+                case 5:
+                    /*
+                     * Indexed color mode.
+                     */
+                    idx88Color = true;
+                    break;
+
+                default:
+                    /*
+                     * This is neither indexed nor RGB color.  Bail out.
+                     */
+                    return;
+                }
+
+            } // if ((sgrColorMode == 38) || (sgrColorMode == 48))
 
             switch (i) {
 
@@ -3400,6 +3749,72 @@ public class ECMA48 implements Runnable {
                 case 8:
                     // Invisible
                     // TODO
+                    break;
+
+                case 90:
+                    // Set black foreground
+                    currentState.attr.setForeColorRGB(get88Color(8));
+                    break;
+                case 91:
+                    // Set red foreground
+                    currentState.attr.setForeColorRGB(get88Color(9));
+                    break;
+                case 92:
+                    // Set green foreground
+                    currentState.attr.setForeColorRGB(get88Color(10));
+                    break;
+                case 93:
+                    // Set yellow foreground
+                    currentState.attr.setForeColorRGB(get88Color(11));
+                    break;
+                case 94:
+                    // Set blue foreground
+                    currentState.attr.setForeColorRGB(get88Color(12));
+                    break;
+                case 95:
+                    // Set magenta foreground
+                    currentState.attr.setForeColorRGB(get88Color(13));
+                    break;
+                case 96:
+                    // Set cyan foreground
+                    currentState.attr.setForeColorRGB(get88Color(14));
+                    break;
+                case 97:
+                    // Set white foreground
+                    currentState.attr.setForeColorRGB(get88Color(15));
+                    break;
+
+                case 100:
+                    // Set black background
+                    currentState.attr.setBackColorRGB(get88Color(8));
+                    break;
+                case 101:
+                    // Set red background
+                    currentState.attr.setBackColorRGB(get88Color(9));
+                    break;
+                case 102:
+                    // Set green background
+                    currentState.attr.setBackColorRGB(get88Color(10));
+                    break;
+                case 103:
+                    // Set yellow background
+                    currentState.attr.setBackColorRGB(get88Color(11));
+                    break;
+                case 104:
+                    // Set blue background
+                    currentState.attr.setBackColorRGB(get88Color(12));
+                    break;
+                case 105:
+                    // Set magenta background
+                    currentState.attr.setBackColorRGB(get88Color(13));
+                    break;
+                case 106:
+                    // Set cyan background
+                    currentState.attr.setBackColorRGB(get88Color(14));
+                    break;
+                case 107:
+                    // Set white background
+                    currentState.attr.setBackColorRGB(get88Color(15));
                     break;
 
                 default:
@@ -3446,34 +3861,42 @@ public class ECMA48 implements Runnable {
             case 30:
                 // Set black foreground
                 currentState.attr.setForeColor(Color.BLACK);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 31:
                 // Set red foreground
                 currentState.attr.setForeColor(Color.RED);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 32:
                 // Set green foreground
                 currentState.attr.setForeColor(Color.GREEN);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 33:
                 // Set yellow foreground
                 currentState.attr.setForeColor(Color.YELLOW);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 34:
                 // Set blue foreground
                 currentState.attr.setForeColor(Color.BLUE);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 35:
                 // Set magenta foreground
                 currentState.attr.setForeColor(Color.MAGENTA);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 36:
                 // Set cyan foreground
                 currentState.attr.setForeColor(Color.CYAN);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 37:
                 // Set white foreground
                 currentState.attr.setForeColor(Color.WHITE);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 38:
                 if (type == DeviceType.XTERM) {
@@ -3483,21 +3906,28 @@ public class ECMA48 implements Runnable {
                      * permits these ISO-8613-3 SGR sequences to be separated
                      * by colons rather than semicolons.)
                      *
-                     * We will not support any of these additional color
-                     * codes at this time:
+                     * We will support only the following:
                      *
-                     * 1. http://invisible-island.net/ncurses/ncurses.faq.html#xterm_16MegaColors
-                     *    has a detailed discussion of the current state of
-                     *    RGB in various terminals, the point of which is
-                     *    that none of them really do the same thing despite
-                     *    all appearing to be "xterm".
+                     * 1. Indexed color mode (88- or 256-color modes).
                      *
-                     * 2. As seen in
-                     *    https://bugs.kde.org/show_bug.cgi?id=107487#c3,
-                     *    even supporting just the "indexed mode" of these
-                     *    sequences (which could align easily with existing
-                     *    SGR colors) is assumed to mean full support of
-                     *    24-bit RGB.  So it is all or nothing.
+                     * 2. Direct RGB.
+                     *
+                     * These cover most of the use cases in the real world.
+                     *
+                     * HOWEVER, note that this is an awful broken "standard",
+                     * with no way to do it "right".  See
+                     * http://invisible-island.net/ncurses/ncurses.faq.html#xterm_16MegaColors
+                     * for a detailed discussion of the current state of RGB
+                     * in various terminals, the point of which is that none
+                     * of them really do the same thing despite all appearing
+                     * to be "xterm".
+                     *
+                     * Also see
+                     * https://bugs.kde.org/show_bug.cgi?id=107487#c3 .
+                     * where it is assumed that supporting just the "indexed
+                     * mode" of these sequences (which could align easily
+                     * with existing SGR colors) is assumed to mean full
+                     * support of 24-bit RGB.  So it is all or nothing.
                      *
                      * Finally, these sequences break the assumptions of
                      * standard ECMA-48 style parsers as pointed out at
@@ -3505,7 +3935,8 @@ public class ECMA48 implements Runnable {
                      * Therefore in order to keep a clean display, we cannot
                      * parse anything else in this sequence.
                      */
-                    return;
+                    sgrColorMode = 38;
+                    continue;
                 } else {
                     // Underscore on, default foreground color
                     currentState.attr.setUnderline(true);
@@ -3516,38 +3947,47 @@ public class ECMA48 implements Runnable {
                 // Underscore off, default foreground color
                 currentState.attr.setUnderline(false);
                 currentState.attr.setForeColor(Color.WHITE);
+                currentState.attr.setForeColorRGB(-1);
                 break;
             case 40:
                 // Set black background
                 currentState.attr.setBackColor(Color.BLACK);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 41:
                 // Set red background
                 currentState.attr.setBackColor(Color.RED);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 42:
                 // Set green background
                 currentState.attr.setBackColor(Color.GREEN);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 43:
                 // Set yellow background
                 currentState.attr.setBackColor(Color.YELLOW);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 44:
                 // Set blue background
                 currentState.attr.setBackColor(Color.BLUE);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 45:
                 // Set magenta background
                 currentState.attr.setBackColor(Color.MAGENTA);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 46:
                 // Set cyan background
                 currentState.attr.setBackColor(Color.CYAN);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 47:
                 // Set white background
                 currentState.attr.setBackColor(Color.WHITE);
+                currentState.attr.setBackColorRGB(-1);
                 break;
             case 48:
                 if (type == DeviceType.XTERM) {
@@ -3557,16 +3997,43 @@ public class ECMA48 implements Runnable {
                      * permits these ISO-8613-3 SGR sequences to be separated
                      * by colons rather than semicolons.)
                      *
-                     * We will not support this at this time.  Also, in order
-                     * to keep a clean display, we cannot parse anything else
-                     * in this sequence.
+                     * We will support only the following:
+                     *
+                     * 1. Indexed color mode (88- or 256-color modes).
+                     *
+                     * 2. Direct RGB.
+                     *
+                     * These cover most of the use cases in the real world.
+                     *
+                     * HOWEVER, note that this is an awful broken "standard",
+                     * with no way to do it "right".  See
+                     * http://invisible-island.net/ncurses/ncurses.faq.html#xterm_16MegaColors
+                     * for a detailed discussion of the current state of RGB
+                     * in various terminals, the point of which is that none
+                     * of them really do the same thing despite all appearing
+                     * to be "xterm".
+                     *
+                     * Also see
+                     * https://bugs.kde.org/show_bug.cgi?id=107487#c3 .
+                     * where it is assumed that supporting just the "indexed
+                     * mode" of these sequences (which could align easily
+                     * with existing SGR colors) is assumed to mean full
+                     * support of 24-bit RGB.  So it is all or nothing.
+                     *
+                     * Finally, these sequences break the assumptions of
+                     * standard ECMA-48 style parsers as pointed out at
+                     * https://bugs.kde.org/show_bug.cgi?id=107487#c11 .
+                     * Therefore in order to keep a clean display, we cannot
+                     * parse anything else in this sequence.
                      */
-                    return;
+                    sgrColorMode = 48;
+                    continue;
                 }
                 break;
             case 49:
                 // Default background
                 currentState.attr.setBackColor(Color.BLACK);
+                currentState.attr.setBackColorRGB(-1);
                 break;
 
             default:
@@ -4017,19 +4484,39 @@ public class ECMA48 implements Runnable {
      * @param xtermChar the character received from the remote side
      */
     private void oscPut(final char xtermChar) {
+        // System.err.println("oscPut: " + xtermChar);
+
         // Collect first
         collectBuffer.append(xtermChar);
 
         // Xterm cases...
-        if (xtermChar == 0x07) {
-            String args = collectBuffer.substring(0,
-                collectBuffer.length() - 1);
+        if ((xtermChar == 0x07)
+            || (collectBuffer.toString().endsWith("\033\\"))
+        ) {
+            String args = null;
+            if (xtermChar == 0x07) {
+                args = collectBuffer.substring(0, collectBuffer.length() - 1);
+            } else {
+                args = collectBuffer.substring(0, collectBuffer.length() - 2);
+            }
+
             String [] p = args.toString().split(";");
             if (p.length > 0) {
                 if ((p[0].equals("0")) || (p[0].equals("2"))) {
                     if (p.length > 1) {
                         // Screen title
                         screenTitle = p[1];
+                    }
+                }
+
+                if (p[0].equals("4")) {
+                    for (int i = 1; i + 1 < p.length; i += 2) {
+                        // Set a color index value
+                        try {
+                            set88Color(Integer.parseInt(p[i]), p[i + 1]);
+                        } catch (NumberFormatException e) {
+                            // SQUASH
+                        }
                     }
                 }
             }
@@ -4067,16 +4554,21 @@ public class ECMA48 implements Runnable {
         // 80-8F, 91-97, 99, 9A, 9C   --> execute, then switch to SCAN_GROUND
 
         // 0x1B == ESCAPE
-        if ((ch == 0x1B)
-            && (scanState != ScanState.DCS_ENTRY)
-            && (scanState != ScanState.DCS_INTERMEDIATE)
-            && (scanState != ScanState.DCS_IGNORE)
-            && (scanState != ScanState.DCS_PARAM)
-            && (scanState != ScanState.DCS_PASSTHROUGH)
-        ) {
+        if (ch == 0x1B) {
+            if ((type == DeviceType.XTERM)
+                && (scanState == ScanState.OSC_STRING)
+            ) {
+                // Xterm can pass ESCAPE to its OSC sequence.
+            } else if ((scanState != ScanState.DCS_ENTRY)
+                && (scanState != ScanState.DCS_INTERMEDIATE)
+                && (scanState != ScanState.DCS_IGNORE)
+                && (scanState != ScanState.DCS_PARAM)
+                && (scanState != ScanState.DCS_PASSTHROUGH)
+            ) {
 
-            scanState = ScanState.ESCAPE;
-            return;
+                scanState = ScanState.ESCAPE;
+                return;
+            }
         }
 
         // 0x9B == CSI 8-bit sequence
@@ -5931,7 +6423,7 @@ public class ECMA48 implements Runnable {
 
         case OSC_STRING:
             // Special case for Xterm: OSC can pass control characters
-            if ((ch == 0x9C) || (ch <= 0x07)) {
+            if ((ch == 0x9C) || (ch == 0x07) || (ch == 0x1B)) {
                 oscPut(ch);
             }
 
@@ -5983,116 +6475,6 @@ public class ECMA48 implements Runnable {
      */
     public final int getCursorY() {
         return currentState.cursorY;
-    }
-
-    /**
-     * Read function runs on a separate thread.
-     */
-    public final void run() {
-        boolean utf8 = false;
-        boolean done = false;
-
-        if (type == DeviceType.XTERM) {
-            utf8 = true;
-        }
-
-        // available() will often return > 1, so we need to read in chunks to
-        // stay caught up.
-        char [] readBufferUTF8 = null;
-        byte [] readBuffer = null;
-        if (utf8) {
-            readBufferUTF8 = new char[128];
-        } else {
-            readBuffer = new byte[128];
-        }
-
-        while (!done && !stopReaderThread) {
-            try {
-                int n = inputStream.available();
-
-                // System.err.printf("available() %d\n", n); System.err.flush();
-                if (utf8) {
-                    if (readBufferUTF8.length < n) {
-                        // The buffer wasn't big enough, make it huger
-                        int newSizeHalf = Math.max(readBufferUTF8.length,
-                            n);
-
-                        readBufferUTF8 = new char[newSizeHalf * 2];
-                    }
-                } else {
-                    if (readBuffer.length < n) {
-                        // The buffer wasn't big enough, make it huger
-                        int newSizeHalf = Math.max(readBuffer.length, n);
-                        readBuffer = new byte[newSizeHalf * 2];
-                    }
-                }
-                if (n == 0) {
-                    try {
-                        Thread.sleep(2);
-                    } catch (InterruptedException e) {
-                        // SQUASH
-                    }
-                    continue;
-                }
-
-                int rc = -1;
-                try {
-                    if (utf8) {
-                        rc = input.read(readBufferUTF8, 0,
-                            readBufferUTF8.length);
-                    } else {
-                        rc = inputStream.read(readBuffer, 0,
-                            readBuffer.length);
-                    }
-                } catch (ReadTimeoutException e) {
-                    rc = 0;
-                }
-
-                // System.err.printf("read() %d\n", rc); System.err.flush();
-                if (rc == -1) {
-                    // This is EOF
-                    done = true;
-                } else {
-                    for (int i = 0; i < rc; i++) {
-                        int ch = 0;
-                        if (utf8) {
-                            ch = readBufferUTF8[i];
-                        } else {
-                            ch = readBuffer[i];
-                        }
-
-                        synchronized (this) {
-                            // Don't step on UI events
-                            consume((char)ch);
-                        }
-                    }
-                }
-                // System.err.println("end while loop"); System.err.flush();
-            } catch (IOException e) {
-                e.printStackTrace();
-                done = true;
-            }
-
-        } // while ((done == false) && (stopReaderThread == false))
-
-        // Let the rest of the world know that I am done.
-        stopReaderThread = true;
-
-        try {
-            inputStream.cancelRead();
-            inputStream.close();
-            inputStream = null;
-        } catch (IOException e) {
-            // SQUASH
-        }
-        try {
-            input.close();
-            input = null;
-        } catch (IOException e) {
-            // SQUASH
-        }
-
-        // System.err.println("*** run() exiting..."); System.err.flush();
     }
 
 }

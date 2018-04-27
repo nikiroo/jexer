@@ -29,12 +29,16 @@
 package jexer.bits;
 
 /**
- * MnemonicString is used to render a string like "&File" into a highlighted
- * 'F' and the rest of 'ile'.  To insert a literal '&', use two '&&'
- * characters, e.g. "&File && Stuff" would be "File & Stuff" with the first
- * 'F' highlighted.
+ * MnemonicString is used to render a string like "&amp;File" into a
+ * highlighted 'F' and the rest of 'ile'.  To insert a literal '&amp;', use
+ * two '&amp;&amp;' characters, e.g. "&amp;File &amp;&amp; Stuff" would be
+ * "File &amp; Stuff" with the first 'F' highlighted.
  */
-public final class MnemonicString {
+public class MnemonicString {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Keyboard shortcut to activate this item.
@@ -42,47 +46,24 @@ public final class MnemonicString {
     private char shortcut;
 
     /**
-     * Get the keyboard shortcut character.
-     *
-     * @return the highlighted character
-     */
-    public char getShortcut() {
-        return shortcut;
-    }
-
-    /**
      * Location of the highlighted character.
      */
     private int shortcutIdx = -1;
-
-    /**
-     * Get location of the highlighted character.
-     *
-     * @return location of the highlighted character
-     */
-    public int getShortcutIdx() {
-        return shortcutIdx;
-    }
 
     /**
      * The raw (uncolored) string.
      */
     private String rawLabel;
 
-    /**
-     * Get the raw (uncolored) string.
-     *
-     * @return the raw (uncolored) string
-     */
-    public String getRawLabel() {
-        return rawLabel;
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
      *
      * @param label widget label or title.  Label must contain a keyboard
-     * shortcut, denoted by prefixing a letter with "&", e.g. "&File"
+     * shortcut, denoted by prefixing a letter with "&amp;", e.g. "&amp;File"
      */
     public MnemonicString(final String label) {
 
@@ -116,4 +97,36 @@ public final class MnemonicString {
         }
         this.rawLabel = newLabel;
     }
+
+    // ------------------------------------------------------------------------
+    // MnemonicString ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get the keyboard shortcut character.
+     *
+     * @return the highlighted character
+     */
+    public char getShortcut() {
+        return shortcut;
+    }
+
+    /**
+     * Get location of the highlighted character.
+     *
+     * @return location of the highlighted character
+     */
+    public int getShortcutIdx() {
+        return shortcutIdx;
+    }
+
+    /**
+     * Get the raw (uncolored) string.
+     *
+     * @return the raw (uncolored) string
+     */
+    public String getRawLabel() {
+        return rawLabel;
+    }
+
 }

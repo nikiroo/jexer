@@ -33,7 +33,7 @@ import jexer.TKeypress;
 /**
  * This class encapsulates a keyboard input event.
  */
-public final class TKeypressEvent extends TInputEvent {
+public class TKeypressEvent extends TInputEvent {
 
     /**
      * Keystroke received.
@@ -87,6 +87,16 @@ public final class TKeypressEvent extends TInputEvent {
 
         this.key = new TKeypress(key.isFnKey(), key.getKeyCode(), key.getChar(),
             alt, ctrl, shift);
+    }
+
+    /**
+     * Create a duplicate instance.
+     *
+     * @return duplicate intance
+     */
+    public TKeypressEvent dup() {
+        TKeypressEvent keypress = new TKeypressEvent(key.dup());
+        return keypress;
     }
 
     /**

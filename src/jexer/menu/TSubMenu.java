@@ -38,19 +38,27 @@ import static jexer.TKeypress.*;
 /**
  * TSubMenu is a special case menu item that wraps another TMenu.
  */
-public final class TSubMenu extends TMenuItem {
+public class TSubMenu extends TMenuItem {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * The menu window.  Note package private access.
      */
     TMenu menu;
 
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Package private constructor.
      *
      * @param parent parent widget
      * @param title menu title.  Title must contain a keyboard shortcut,
-     * denoted by prefixing a letter with "&", e.g. "&File"
+     * denoted by prefixing a letter with "&amp;", e.g. "&amp;File"
      * @param x column relative to parent
      * @param y row relative to parent
      */
@@ -67,28 +75,9 @@ public final class TSubMenu extends TMenuItem {
         this.menu.isSubMenu = true;
     }
 
-    /**
-     * Draw the menu title.
-     */
-    @Override
-    public void draw() {
-        super.draw();
-
-        CellAttributes menuColor;
-        if (isAbsoluteActive()) {
-            menuColor = getTheme().getColor("tmenu.highlighted");
-        } else {
-            if (isEnabled()) {
-                menuColor = getTheme().getColor("tmenu");
-            } else {
-                menuColor = getTheme().getColor("tmenu.disabled");
-            }
-        }
-
-        // Add the arrow
-        getScreen().putCharXY(getWidth() - 2, 0, GraphicsChars.CP437[0x10],
-            menuColor);
-    }
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Handle keystrokes.
@@ -151,6 +140,33 @@ public final class TSubMenu extends TMenuItem {
         }
     }
 
+    // ------------------------------------------------------------------------
+    // TMenuItem --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Draw the menu title.
+     */
+    @Override
+    public void draw() {
+        super.draw();
+
+        CellAttributes menuColor;
+        if (isAbsoluteActive()) {
+            menuColor = getTheme().getColor("tmenu.highlighted");
+        } else {
+            if (isEnabled()) {
+                menuColor = getTheme().getColor("tmenu");
+            } else {
+                menuColor = getTheme().getColor("tmenu.disabled");
+            }
+        }
+
+        // Add the arrow
+        getScreen().putCharXY(getWidth() - 2, 0, GraphicsChars.CP437[0x10],
+            menuColor);
+    }
+
     /**
      * Override dispatch() to do nothing.
      */
@@ -178,6 +194,10 @@ public final class TSubMenu extends TMenuItem {
         // Menu not active, return me
         return this;
     }
+
+    // ------------------------------------------------------------------------
+    // TSubMenu ---------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Convenience function to add a custom menu item.
@@ -226,12 +246,11 @@ public final class TSubMenu extends TMenuItem {
      * Convenience function to add a sub-menu.
      *
      * @param title menu title.  Title must contain a keyboard shortcut,
-     * denoted by prefixing a letter with "&", e.g. "&File"
+     * denoted by prefixing a letter with "&amp;", e.g. "&amp;File"
      * @return the new sub-menu
      */
     public TSubMenu addSubMenu(final String title) {
         return menu.addSubMenu(title);
     }
-
 
 }

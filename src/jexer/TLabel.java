@@ -33,7 +33,11 @@ import jexer.bits.CellAttributes;
 /**
  * TLabel implements a simple label.
  */
-public final class TLabel extends TWidget {
+public class TLabel extends TWidget {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Label text.
@@ -41,27 +45,18 @@ public final class TLabel extends TWidget {
     private String label = "";
 
     /**
-     * Get label text.
-     *
-     * @return label text
-     */
-    public String getLabel() {
-        return label;
-    }
-
-    /**
-     * Set label text.
-     *
-     * @param label new label text
-     */
-    public void setLabel(final String label) {
-        this.label = label;
-    }
-
-    /**
      * Label color.
      */
     private String colorKey;
+
+    /**
+     * If true, use the window's background color.
+     */
+    private boolean useWindowBackground = true;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor, using the default "tlabel" for colorKey.
@@ -89,12 +84,33 @@ public final class TLabel extends TWidget {
     public TLabel(final TWidget parent, final String text, final int x,
         final int y, final String colorKey) {
 
+        this(parent, text, x, y, colorKey, true);
+    }
+
+    /**
+     * Public constructor.
+     *
+     * @param parent parent widget
+     * @param text label on the screen
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param colorKey ColorTheme key color to use for foreground text
+     * @param useWindowBackground if true, use the window's background color
+     */
+    public TLabel(final TWidget parent, final String text, final int x,
+        final int y, final String colorKey, final boolean useWindowBackground) {
+
         // Set parent and window
         super(parent, false, x, y, text.length(), 1);
 
         this.label = text;
         this.colorKey = colorKey;
+        this.useWindowBackground = useWindowBackground;
     }
+
+    // ------------------------------------------------------------------------
+    // TWidget ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Draw a static label.
@@ -104,10 +120,33 @@ public final class TLabel extends TWidget {
         // Setup my color
         CellAttributes color = new CellAttributes();
         color.setTo(getTheme().getColor(colorKey));
-        CellAttributes background = getWindow().getBackground();
-        color.setBackColor(background.getBackColor());
-
+        if (useWindowBackground) {
+            CellAttributes background = getWindow().getBackground();
+            color.setBackColor(background.getBackColor());
+        }
         getScreen().putStringXY(0, 0, label, color);
+    }
+
+    // ------------------------------------------------------------------------
+    // TLabel -----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get label text.
+     *
+     * @return label text
+     */
+    public String getLabel() {
+        return label;
+    }
+
+    /**
+     * Set label text.
+     *
+     * @param label new label text
+     */
+    public void setLabel(final String label) {
+        this.label = label;
     }
 
 }

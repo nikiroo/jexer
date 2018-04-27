@@ -32,7 +32,6 @@ package jexer;
  * TInputBox is a system-modal dialog with an OK button and a text input
  * field.  Call it like:
  *
- * <p>
  * <pre>
  * {@code
  *     box = application.inputBox(title, caption);
@@ -43,7 +42,7 @@ package jexer;
  * </pre>
  *
  */
-public final class TInputBox extends TMessageBox {
+public class TInputBox extends TMessageBox {
 
     /**
      * The input field.
@@ -70,7 +69,7 @@ public final class TInputBox extends TMessageBox {
     public TInputBox(final TApplication application, final String title,
         final String caption) {
 
-        this(application, title, caption, "");
+        this(application, title, caption, "", Type.OK);
     }
 
     /**
@@ -85,7 +84,23 @@ public final class TInputBox extends TMessageBox {
     public TInputBox(final TApplication application, final String title,
         final String caption, final String text) {
 
-        super(application, title, caption, Type.OK, false);
+        this(application, title, caption, text, Type.OK);
+    }
+
+    /**
+     * Public constructor.  The input box will be centered on screen.
+     *
+     * @param application TApplication that manages this window
+     * @param title window title, will be centered along the top border
+     * @param caption message to display.  Use embedded newlines to get a
+     * multi-line box.
+     * @param text initial text to seed the field with
+     * @param type one of the Type constants.  Default is Type.OK.
+     */
+    public TInputBox(final TApplication application, final String title,
+        final String caption, final String text, final Type type) {
+
+        super(application, title, caption, type, false);
 
         for (TWidget widget: getChildren()) {
             if (widget instanceof TButton) {

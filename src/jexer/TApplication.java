@@ -28,12 +28,14 @@
  */
 package jexer;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -41,10 +43,10 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.ResourceBundle;
 
 import jexer.bits.CellAttributes;
 import jexer.bits.ColorTheme;
-import jexer.bits.GraphicsChars;
 import jexer.event.TCommandEvent;
 import jexer.event.TInputEvent;
 import jexer.event.TKeypressEvent;
@@ -52,21 +54,30 @@ import jexer.event.TMenuEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
 import jexer.backend.Backend;
+import jexer.backend.Screen;
+import jexer.backend.MultiBackend;
 import jexer.backend.SwingBackend;
 import jexer.backend.ECMA48Backend;
-import jexer.io.Screen;
+import jexer.backend.TWindowBackend;
 import jexer.menu.TMenu;
 import jexer.menu.TMenuItem;
 import static jexer.TCommand.*;
 import static jexer.TKeypress.*;
 
 /**
- * TApplication sets up a full Text User Interface application.
+ * TApplication is the main driver class for a full Text User Interface
+ * application.  It manages windows, provides a menu bar and status bar, and
+ * processes events received from the user.
  */
 public class TApplication implements Runnable {
 
+    /**
+     * Translated strings.
+     */
+    private static final ResourceBundle i18n = ResourceBundle.getBundle(TApplication.class.getName());
+
     // ------------------------------------------------------------------------
-    // Public constants -------------------------------------------------------
+    // Constants --------------------------------------------------------------
     // ------------------------------------------------------------------------
 
     /**
@@ -106,8 +117,154 @@ public class TApplication implements Runnable {
     }
 
     // ------------------------------------------------------------------------
-    // Primary/secondary event handlers ---------------------------------------
+    // Variables --------------------------------------------------------------
     // ------------------------------------------------------------------------
+
+    /**
+     * The primary event handler thread.
+     */
+    private volatile WidgetEventHandler primaryEventHandler;
+
+    /**
+     * The secondary event handler thread.
+     */
+    private volatile WidgetEventHandler secondaryEventHandler;
+
+    /**
+     * The widget receiving events from the secondary event handler thread.
+     */
+    private volatile TWidget secondaryEventReceiver;
+
+    /**
+     * Access to the physical screen, keyboard, and mouse.
+     */
+    private Backend backend;
+
+    /**
+     * Actual mouse coordinate X.
+     */
+    private int mouseX;
+
+    /**
+     * Actual mouse coordinate Y.
+     */
+    private int mouseY;
+
+    /**
+     * Old version of mouse coordinate X.
+     */
+    private int oldMouseX;
+
+    /**
+     * Old version mouse coordinate Y.
+     */
+    private int oldMouseY;
+
+    /**
+     * The last mouse up click time, used to determine if this is a mouse
+     * double-click.
+     */
+    private long lastMouseUpTime;
+
+    /**
+     * The amount of millis between mouse up events to assume a double-click.
+     */
+    private long doubleClickTime = 250;
+
+    /**
+     * Event queue that is filled by run().
+     */
+    private List<TInputEvent> fillEventQueue;
+
+    /**
+     * Event queue that will be drained by either primary or secondary
+     * Thread.
+     */
+    private List<TInputEvent> drainEventQueue;
+
+    /**
+     * Top-level menus in this application.
+     */
+    private List<TMenu> menus;
+
+    /**
+     * Stack of activated sub-menus in this application.
+     */
+    private List<TMenu> subMenus;
+
+    /**
+     * The currently active menu.
+     */
+    private TMenu activeMenu = null;
+
+    /**
+     * Active keyboard accelerators.
+     */
+    private Map<TKeypress, TMenuItem> accelerators;
+
+    /**
+     * All menu items.
+     */
+    private List<TMenuItem> menuItems;
+
+    /**
+     * Windows and widgets pull colors from this ColorTheme.
+     */
+    private ColorTheme theme;
+
+    /**
+     * The top-level windows (but not menus).
+     */
+    private List<TWindow> windows;
+
+    /**
+     * The currently acive window.
+     */
+    private TWindow activeWindow = null;
+
+    /**
+     * Timers that are being ticked.
+     */
+    private List<TTimer> timers;
+
+    /**
+     * When true, the application has been started.
+     */
+    private volatile boolean started = false;
+
+    /**
+     * When true, exit the application.
+     */
+    private volatile boolean quit = false;
+
+    /**
+     * When true, repaint the entire screen.
+     */
+    private volatile boolean repaint = true;
+
+    /**
+     * Y coordinate of the top edge of the desktop.  For now this is a
+     * constant.  Someday it would be nice to have a multi-line menu or
+     * toolbars.
+     */
+    private static final int desktopTop = 1;
+
+    /**
+     * Y coordinate of the bottom edge of the desktop.
+     */
+    private int desktopBottom;
+
+    /**
+     * An optional TDesktop background window that is drawn underneath
+     * everything else.
+     */
+    private TDesktop desktop;
+
+    /**
+     * If true, focus follows mouse: windows automatically raised if the
+     * mouse passes over them.
+     */
+    private boolean focusFollowsMouse = false;
 
     /**
      * WidgetEventHandler is the main event consumer loop.  There are at most
@@ -143,6 +300,7 @@ public class TApplication implements Runnable {
          * The consumer loop.
          */
         public void run() {
+            boolean first = true;
 
             // Loop forever
             while (!application.quit) {
@@ -156,44 +314,52 @@ public class TApplication implements Runnable {
                             }
                         }
 
-                        synchronized (this) {
-                            if (debugThreads) {
-                                System.err.printf("%s %s sleep\n", this,
-                                    primary ? "primary" : "secondary");
-                            }
+                        long timeout = 0;
+                        if (first) {
+                            first = false;
+                        } else {
+                            timeout = application.getSleepTime(1000);
+                        }
 
-                            this.wait();
-
-                            if (debugThreads) {
-                                System.err.printf("%s %s AWAKE\n", this,
-                                    primary ? "primary" : "secondary");
-                            }
-
-                            if ((!primary)
-                                && (application.secondaryEventReceiver == null)
-                            ) {
-                                // Secondary thread, emergency exit.  If we
-                                // got here then something went wrong with
-                                // the handoff between yield() and
-                                // closeWindow().
-                                synchronized (application.primaryEventHandler) {
-                                    application.primaryEventHandler.notify();
-                                }
-                                application.secondaryEventHandler = null;
-                                throw new RuntimeException(
-                                        "secondary exited at wrong time");
-                            }
+                        if (timeout == 0) {
+                            // A timer needs to fire, break out.
                             break;
                         }
+
+                        if (debugThreads) {
+                            System.err.printf("%d %s %s sleep %d millis\n",
+                                System.currentTimeMillis(), this,
+                                primary ? "primary" : "secondary", timeout);
+                        }
+
+                        synchronized (this) {
+                            this.wait(timeout);
+                        }
+
+                        if (debugThreads) {
+                            System.err.printf("%d %s %s AWAKE\n",
+                                System.currentTimeMillis(), this,
+                                primary ? "primary" : "secondary");
+                        }
+
+                        if ((!primary)
+                            && (application.secondaryEventReceiver == null)
+                        ) {
+                            // Secondary thread, emergency exit.  If we got
+                            // here then something went wrong with the
+                            // handoff between yield() and closeWindow().
+                            synchronized (application.primaryEventHandler) {
+                                application.primaryEventHandler.notify();
+                            }
+                            application.secondaryEventHandler = null;
+                            throw new RuntimeException("secondary exited " +
+                                "at wrong time");
+                        }
+                        break;
                     } catch (InterruptedException e) {
                         // SQUASH
                     }
-                }
-
-                // Wait for drawAll() or doIdle() to be done, then handle the
-                // events.
-                boolean oldLock = lockHandleEvent();
-                assert (oldLock == false);
+                } // while (!application.quit)
 
                 // Pull all events off the queue
                 for (;;) {
@@ -204,7 +370,11 @@ public class TApplication implements Runnable {
                         }
                         event = application.drainEventQueue.remove(0);
                     }
+
+                    // We will have an event to process, so repaint the
+                    // screen at the end.
                     application.repaint = true;
+
                     if (primary) {
                         primaryHandleEvent(event);
                     } else {
@@ -228,321 +398,54 @@ public class TApplication implements Runnable {
                         // All done!
                         return;
                     }
+
                 } // for (;;)
 
-                // Unlock.  Either I am primary thread, or I am secondary
-                // thread and still running.
-                oldLock = unlockHandleEvent();
-                assert (oldLock == true);
-
-                // I have done some work of some kind.  Tell the main run()
-                // loop to wake up now.
-                synchronized (application) {
-                    application.notify();
+                // Fire timers, update screen.
+                if (!quit) {
+                    application.finishEventProcessing();
                 }
 
             } // while (true) (main runnable loop)
         }
     }
 
-    /**
-     * The primary event handler thread.
-     */
-    private volatile WidgetEventHandler primaryEventHandler;
-
-    /**
-     * The secondary event handler thread.
-     */
-    private volatile WidgetEventHandler secondaryEventHandler;
-
-    /**
-     * The widget receiving events from the secondary event handler thread.
-     */
-    private volatile TWidget secondaryEventReceiver;
-
-    /**
-     * Spinlock for the primary and secondary event handlers.
-     * WidgetEventHandler.run() is responsible for setting this value.
-     */
-    private volatile boolean insideHandleEvent = false;
-
-    /**
-     * Wake the sleeping active event handler.
-     */
-    private void wakeEventHandler() {
-        if (secondaryEventHandler != null) {
-            synchronized (secondaryEventHandler) {
-                secondaryEventHandler.notify();
-            }
-        } else {
-            assert (primaryEventHandler != null);
-            synchronized (primaryEventHandler) {
-                primaryEventHandler.notify();
-            }
-        }
-    }
-
-    /**
-     * Set the insideHandleEvent flag to true.  lockoutEventHandlers() will
-     * spin indefinitely until unlockHandleEvent() is called.
-     *
-     * @return the old value of insideHandleEvent
-     */
-    private boolean lockHandleEvent() {
-        if (debugThreads) {
-            System.err.printf("  >> lockHandleEvent(): oldValue %s",
-                insideHandleEvent);
-        }
-        boolean oldValue = true;
-
-        synchronized (this) {
-            // Wait for TApplication.run() to finish using the global state
-            // before allowing further event processing.
-            while (lockoutHandleEvent == true) {
-                try {
-                    // Backoff so that the backend can finish its work.
-                    Thread.sleep(5);
-                } catch (InterruptedException e) {
-                    // SQUASH
-                }
-            }
-
-            oldValue = insideHandleEvent;
-            insideHandleEvent = true;
-        }
-
-        if (debugThreads) {
-            System.err.printf(" ***\n");
-        }
-        return oldValue;
-    }
-
-    /**
-     * Set the insideHandleEvent flag to false.  lockoutEventHandlers() will
-     * spin indefinitely until unlockHandleEvent() is called.
-     *
-     * @return the old value of insideHandleEvent
-     */
-    private boolean unlockHandleEvent() {
-        if (debugThreads) {
-            System.err.printf("  << unlockHandleEvent(): oldValue %s\n",
-                insideHandleEvent);
-        }
-        synchronized (this) {
-            boolean oldValue = insideHandleEvent;
-            insideHandleEvent = false;
-            return oldValue;
-        }
-    }
-
-    /**
-     * Spinlock for the primary and secondary event handlers.  When true, the
-     * event handlers will spinlock wait before calling handleEvent().
-     */
-    private volatile boolean lockoutHandleEvent = false;
-
-    /**
-     * TApplication.run() needs to be able rely on the global data structures
-     * being intact when calling doIdle() and drawAll().  Tell the event
-     * handlers to wait for an unlock before handling their events.
-     */
-    private void stopEventHandlers() {
-        if (debugThreads) {
-            System.err.printf(">> stopEventHandlers()");
-        }
-
-        lockoutHandleEvent = true;
-        // Wait for the last event to finish processing before returning
-        // control to TApplication.run().
-        while (insideHandleEvent == true) {
-            try {
-                // Backoff so that the event handler can finish its work.
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                // SQUASH
-            }
-        }
-
-        if (debugThreads) {
-            System.err.printf(" XXX\n");
-        }
-    }
-
-    /**
-     * TApplication.run() needs to be able rely on the global data structures
-     * being intact when calling doIdle() and drawAll().  Tell the event
-     * handlers that it is now OK to handle their events.
-     */
-    private void startEventHandlers() {
-        if (debugThreads) {
-            System.err.printf("<< startEventHandlers()\n");
-        }
-        lockoutHandleEvent = false;
-    }
-
-    // ------------------------------------------------------------------------
-    // TApplication attributes ------------------------------------------------
-    // ------------------------------------------------------------------------
-
-    /**
-     * Access to the physical screen, keyboard, and mouse.
-     */
-    private Backend backend;
-
-    /**
-     * Get the Backend.
-     *
-     * @return the Backend
-     */
-    public final Backend getBackend() {
-        return backend;
-    }
-
-    /**
-     * Get the Screen.
-     *
-     * @return the Screen
-     */
-    public final Screen getScreen() {
-        return backend.getScreen();
-    }
-
-    /**
-     * Actual mouse coordinate X.
-     */
-    private int mouseX;
-
-    /**
-     * Actual mouse coordinate Y.
-     */
-    private int mouseY;
-
-    /**
-     * Old version of mouse coordinate X.
-     */
-    private int oldMouseX;
-
-    /**
-     * Old version mouse coordinate Y.
-     */
-    private int oldMouseY;
-
-    /**
-     * Event queue that is filled by run().
-     */
-    private List<TInputEvent> fillEventQueue;
-
-    /**
-     * Event queue that will be drained by either primary or secondary
-     * Thread.
-     */
-    private List<TInputEvent> drainEventQueue;
-
-    /**
-     * Top-level menus in this application.
-     */
-    private List<TMenu> menus;
-
-    /**
-     * Stack of activated sub-menus in this application.
-     */
-    private List<TMenu> subMenus;
-
-    /**
-     * The currently acive menu.
-     */
-    private TMenu activeMenu = null;
-
-    /**
-     * Active keyboard accelerators.
-     */
-    private Map<TKeypress, TMenuItem> accelerators;
-
-    /**
-     * All menu items.
-     */
-    private List<TMenuItem> menuItems;
-
-    /**
-     * Windows and widgets pull colors from this ColorTheme.
-     */
-    private ColorTheme theme;
-
-    /**
-     * Get the color theme.
-     *
-     * @return the theme
-     */
-    public final ColorTheme getTheme() {
-        return theme;
-    }
-
-    /**
-     * The top-level windows (but not menus).
-     */
-    private List<TWindow> windows;
-
-    /**
-     * Timers that are being ticked.
-     */
-    private List<TTimer> timers;
-
-    /**
-     * When true, exit the application.
-     */
-    private volatile boolean quit = false;
-
-    /**
-     * When true, repaint the entire screen.
-     */
-    private volatile boolean repaint = true;
-
-    /**
-     * Y coordinate of the top edge of the desktop.  For now this is a
-     * constant.  Someday it would be nice to have a multi-line menu or
-     * toolbars.
-     */
-    private static final int desktopTop = 1;
-
-    /**
-     * Get Y coordinate of the top edge of the desktop.
-     *
-     * @return Y coordinate of the top edge of the desktop
-     */
-    public final int getDesktopTop() {
-        return desktopTop;
-    }
-
-    /**
-     * Y coordinate of the bottom edge of the desktop.
-     */
-    private int desktopBottom;
-
-    /**
-     * Get Y coordinate of the bottom edge of the desktop.
-     *
-     * @return Y coordinate of the bottom edge of the desktop
-     */
-    public final int getDesktopBottom() {
-        return desktopBottom;
-    }
-
-    // ------------------------------------------------------------------------
-    // General behavior -------------------------------------------------------
-    // ------------------------------------------------------------------------
-
-    /**
-     * Display the about dialog.
-     */
-    protected void showAboutDialog() {
-        messageBox("About", "Jexer Version " +
-            this.getClass().getPackage().getImplementationVersion(),
-            TMessageBox.Type.OK);
-    }
-
     // ------------------------------------------------------------------------
     // Constructors -----------------------------------------------------------
     // ------------------------------------------------------------------------
+
+    /**
+     * Public constructor.
+     *
+     * @param backendType BackendType.XTERM, BackendType.ECMA48 or
+     * BackendType.SWING
+     * @param windowWidth the number of text columns to start with
+     * @param windowHeight the number of text rows to start with
+     * @param fontSize the size in points
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
+     */
+    public TApplication(final BackendType backendType, final int windowWidth,
+        final int windowHeight, final int fontSize)
+        throws UnsupportedEncodingException {
+
+        switch (backendType) {
+        case SWING:
+            backend = new SwingBackend(this, windowWidth, windowHeight,
+                fontSize);
+            break;
+        case XTERM:
+            // Fall through...
+        case ECMA48:
+            backend = new ECMA48Backend(this, null, null, windowWidth,
+                windowHeight, fontSize);
+            break;
+        default:
+            throw new IllegalArgumentException("Invalid backend type: "
+                + backendType);
+        }
+        TApplicationImpl();
+    }
 
     /**
      * Public constructor.
@@ -557,6 +460,12 @@ public class TApplication implements Runnable {
 
         switch (backendType) {
         case SWING:
+            // The default SwingBackend is 80x25, 20 pt font.  If you want to
+            // change that, you can pass the extra arguments to the
+            // SwingBackend constructor here.  For example, if you wanted
+            // 90x30, 16 pt font:
+            //
+            // backend = new SwingBackend(this, 90, 30, 16);
             backend = new SwingBackend(this);
             break;
         case XTERM:
@@ -633,6 +542,7 @@ public class TApplication implements Runnable {
      */
     public TApplication(final Backend backend) {
         this.backend = backend;
+        backend.setListener(this);
         TApplicationImpl();
     }
 
@@ -650,10 +560,811 @@ public class TApplication implements Runnable {
         timers          = new LinkedList<TTimer>();
         accelerators    = new HashMap<TKeypress, TMenuItem>();
         menuItems       = new ArrayList<TMenuItem>();
+        desktop         = new TDesktop(this);
 
-        // Setup the main consumer thread
+        // Special case: the Swing backend needs to have a timer to drive its
+        // blink state.
+        if ((backend instanceof SwingBackend)
+            || (backend instanceof MultiBackend)
+        ) {
+            // Default to 500 millis, unless a SwingBackend has its own
+            // value.
+            long millis = 500;
+            if (backend instanceof SwingBackend) {
+                millis = ((SwingBackend) backend).getBlinkMillis();
+            }
+            if (millis > 0) {
+                addTimer(millis, true,
+                    new TAction() {
+                        public void DO() {
+                            TApplication.this.doRepaint();
+                        }
+                    }
+                );
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Runnable ---------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Run this application until it exits.
+     */
+    public void run() {
+        // Start the main consumer thread
         primaryEventHandler = new WidgetEventHandler(this, true);
         (new Thread(primaryEventHandler)).start();
+
+        started = true;
+
+        while (!quit) {
+            synchronized (this) {
+                boolean doWait = false;
+
+                if (!backend.hasEvents()) {
+                    synchronized (fillEventQueue) {
+                        if (fillEventQueue.size() == 0) {
+                            doWait = true;
+                        }
+                    }
+                }
+
+                if (doWait) {
+                    // No I/O to dispatch, so wait until the backend
+                    // provides new I/O.
+                    try {
+                        if (debugThreads) {
+                            System.err.println(System.currentTimeMillis() +
+                                " MAIN sleep");
+                        }
+
+                        this.wait();
+
+                        if (debugThreads) {
+                            System.err.println(System.currentTimeMillis() +
+                                " MAIN AWAKE");
+                        }
+                    } catch (InterruptedException e) {
+                        // I'm awake and don't care why, let's see what's
+                        // going on out there.
+                    }
+                }
+
+            } // synchronized (this)
+
+            synchronized (fillEventQueue) {
+                // Pull any pending I/O events
+                backend.getEvents(fillEventQueue);
+
+                // Dispatch each event to the appropriate handler, one at a
+                // time.
+                for (;;) {
+                    TInputEvent event = null;
+                    if (fillEventQueue.size() == 0) {
+                        break;
+                    }
+                    event = fillEventQueue.remove(0);
+                    metaHandleEvent(event);
+                }
+            }
+
+            // Wake a consumer thread if we have any pending events.
+            if (drainEventQueue.size() > 0) {
+                wakeEventHandler();
+            }
+
+        } // while (!quit)
+
+        // Shutdown the event consumer threads
+        if (secondaryEventHandler != null) {
+            synchronized (secondaryEventHandler) {
+                secondaryEventHandler.notify();
+            }
+        }
+        if (primaryEventHandler != null) {
+            synchronized (primaryEventHandler) {
+                primaryEventHandler.notify();
+            }
+        }
+
+        // Shutdown the user I/O thread(s)
+        backend.shutdown();
+
+        // Close all the windows.  This gives them an opportunity to release
+        // resources.
+        closeAllWindows();
+
+    }
+
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Method that TApplication subclasses can override to handle menu or
+     * posted command events.
+     *
+     * @param command command event
+     * @return if true, this event was consumed
+     */
+    protected boolean onCommand(final TCommandEvent command) {
+        // Default: handle cmExit
+        if (command.equals(cmExit)) {
+        	exit(true);
+            return true;
+        }
+
+        if (command.equals(cmShell)) {
+            openTerminal(0, 0, TWindow.RESIZABLE);
+            return true;
+        }
+
+        if (command.equals(cmTile)) {
+            tileWindows();
+            return true;
+        }
+        if (command.equals(cmCascade)) {
+            cascadeWindows();
+            return true;
+        }
+        if (command.equals(cmCloseAll)) {
+            closeAllWindows();
+            return true;
+        }
+
+        if (command.equals(cmMenu)) {
+            if (!modalWindowActive() && (activeMenu == null)) {
+                if (menus.size() > 0) {
+                    menus.get(0).setActive(true);
+                    activeMenu = menus.get(0);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Method that TApplication subclasses can override to handle menu
+     * events.
+     *
+     * @param menu menu event
+     * @return if true, this event was consumed
+     */
+    protected boolean onMenu(final TMenuEvent menu) {
+
+        // Default: handle MID_EXIT
+        if (menu.getId() == TMenu.MID_EXIT) {
+            exit(true);
+            return true;
+        }
+
+        if (menu.getId() == TMenu.MID_SHELL) {
+            openTerminal(0, 0, TWindow.RESIZABLE);
+            return true;
+        }
+
+        if (menu.getId() == TMenu.MID_TILE) {
+            tileWindows();
+            return true;
+        }
+        if (menu.getId() == TMenu.MID_CASCADE) {
+            cascadeWindows();
+            return true;
+        }
+        if (menu.getId() == TMenu.MID_CLOSE_ALL) {
+            closeAllWindows();
+            return true;
+        }
+        if (menu.getId() == TMenu.MID_ABOUT) {
+            showAboutDialog();
+            return true;
+        }
+        if (menu.getId() == TMenu.MID_REPAINT) {
+            doRepaint();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Method that TApplication subclasses can override to handle keystrokes.
+     *
+     * @param keypress keystroke event
+     * @return if true, this event was consumed
+     */
+    protected boolean onKeypress(final TKeypressEvent keypress) {
+        // Default: only menu shortcuts
+
+        // Process Alt-F, Alt-E, etc. menu shortcut keys
+        if (!keypress.getKey().isFnKey()
+            && keypress.getKey().isAlt()
+            && !keypress.getKey().isCtrl()
+            && (activeMenu == null)
+            && !modalWindowActive()
+        ) {
+
+            assert (subMenus.size() == 0);
+
+            for (TMenu menu: menus) {
+                if (Character.toLowerCase(menu.getMnemonic().getShortcut())
+                    == Character.toLowerCase(keypress.getKey().getChar())
+                ) {
+                    activeMenu = menu;
+                    menu.setActive(true);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Process background events, and update the screen.
+     */
+    private void finishEventProcessing() {
+        if (debugThreads) {
+            System.err.printf(System.currentTimeMillis() + " " +
+                Thread.currentThread() + " finishEventProcessing()\n");
+        }
+
+        // Process timers and call doIdle()'s
+        doIdle();
+
+        // Update the screen
+        synchronized (getScreen()) {
+            drawAll();
+        }
+
+        if (debugThreads) {
+            System.err.printf(System.currentTimeMillis() + " " +
+                Thread.currentThread() + " finishEventProcessing() END\n");
+        }
+    }
+
+    /**
+     * Peek at certain application-level events, add to eventQueue, and wake
+     * up the consuming Thread.
+     *
+     * @param event the input event to consume
+     */
+    private void metaHandleEvent(final TInputEvent event) {
+
+        if (debugEvents) {
+            System.err.printf(String.format("metaHandleEvents event: %s\n",
+                    event)); System.err.flush();
+        }
+
+        if (quit) {
+            // Do no more processing if the application is already trying
+            // to exit.
+            return;
+        }
+
+        // Special application-wide events -------------------------------
+
+        // Abort everything
+        if (event instanceof TCommandEvent) {
+            TCommandEvent command = (TCommandEvent) event;
+            if (command.getCmd().equals(cmAbort)) {
+                exit();
+                return;
+            }
+        }
+
+        synchronized (drainEventQueue) {
+            // Screen resize
+            if (event instanceof TResizeEvent) {
+                TResizeEvent resize = (TResizeEvent) event;
+                synchronized (getScreen()) {
+                    getScreen().setDimensions(resize.getWidth(),
+                        resize.getHeight());
+                    desktopBottom = getScreen().getHeight() - 1;
+                    mouseX = 0;
+                    mouseY = 0;
+                    oldMouseX = 0;
+                    oldMouseY = 0;
+                }
+                if (desktop != null) {
+                    desktop.setDimensions(0, 0, resize.getWidth(),
+                        resize.getHeight() - 1);
+                }
+
+                // Change menu edges if needed.
+                recomputeMenuX();
+
+                // We are dirty, redraw the screen.
+                doRepaint();
+
+                /*
+                System.err.println("New screen: " + resize.getWidth() +
+                    " x " + resize.getHeight());
+                */
+                return;
+            }
+
+            // Put into the main queue
+            drainEventQueue.add(event);
+        }
+    }
+
+    /**
+     * Dispatch one event to the appropriate widget or application-level
+     * event handler.  This is the primary event handler, it has the normal
+     * application-wide event handling.
+     *
+     * @param event the input event to consume
+     * @see #secondaryHandleEvent(TInputEvent event)
+     */
+    private void primaryHandleEvent(final TInputEvent event) {
+
+        if (debugEvents) {
+            System.err.printf("Handle event: %s\n", event);
+        }
+        TMouseEvent doubleClick = null;
+
+        // Special application-wide events -----------------------------------
+
+        // Peek at the mouse position
+        if (event instanceof TMouseEvent) {
+            TMouseEvent mouse = (TMouseEvent) event;
+            if ((mouseX != mouse.getX()) || (mouseY != mouse.getY())) {
+                oldMouseX = mouseX;
+                oldMouseY = mouseY;
+                mouseX = mouse.getX();
+                mouseY = mouse.getY();
+            } else {
+                if (mouse.getType() == TMouseEvent.Type.MOUSE_UP) {
+                    if ((mouse.getTime().getTime() - lastMouseUpTime) <
+                        doubleClickTime) {
+
+                        // This is a double-click.
+                        doubleClick = new TMouseEvent(TMouseEvent.Type.
+                            MOUSE_DOUBLE_CLICK,
+                            mouse.getX(), mouse.getY(),
+                            mouse.getAbsoluteX(), mouse.getAbsoluteY(),
+                            mouse.isMouse1(), mouse.isMouse2(),
+                            mouse.isMouse3(),
+                            mouse.isMouseWheelUp(), mouse.isMouseWheelDown());
+
+                    } else {
+                        // The first click of a potential double-click.
+                        lastMouseUpTime = mouse.getTime().getTime();
+                    }
+                }
+            }
+
+            // See if we need to switch focus to another window or the menu
+            checkSwitchFocus((TMouseEvent) event);
+        }
+
+        // Handle menu events
+        if ((activeMenu != null) && !(event instanceof TCommandEvent)) {
+            TMenu menu = activeMenu;
+
+            if (event instanceof TMouseEvent) {
+                TMouseEvent mouse = (TMouseEvent) event;
+
+                while (subMenus.size() > 0) {
+                    TMenu subMenu = subMenus.get(subMenus.size() - 1);
+                    if (subMenu.mouseWouldHit(mouse)) {
+                        break;
+                    }
+                    if ((mouse.getType() == TMouseEvent.Type.MOUSE_MOTION)
+                        && (!mouse.isMouse1())
+                        && (!mouse.isMouse2())
+                        && (!mouse.isMouse3())
+                        && (!mouse.isMouseWheelUp())
+                        && (!mouse.isMouseWheelDown())
+                    ) {
+                        break;
+                    }
+                    // We navigated away from a sub-menu, so close it
+                    closeSubMenu();
+                }
+
+                // Convert the mouse relative x/y to menu coordinates
+                assert (mouse.getX() == mouse.getAbsoluteX());
+                assert (mouse.getY() == mouse.getAbsoluteY());
+                if (subMenus.size() > 0) {
+                    menu = subMenus.get(subMenus.size() - 1);
+                }
+                mouse.setX(mouse.getX() - menu.getX());
+                mouse.setY(mouse.getY() - menu.getY());
+            }
+            menu.handleEvent(event);
+            return;
+        }
+
+        if (event instanceof TKeypressEvent) {
+            TKeypressEvent keypress = (TKeypressEvent) event;
+
+            // See if this key matches an accelerator, and is not being
+            // shortcutted by the active window, and if so dispatch the menu
+            // event.
+            boolean windowWillShortcut = false;
+            if (activeWindow != null) {
+                assert (activeWindow.isShown());
+                if (activeWindow.isShortcutKeypress(keypress.getKey())) {
+                    // We do not process this key, it will be passed to the
+                    // window instead.
+                    windowWillShortcut = true;
+                }
+            }
+
+            if (!windowWillShortcut && !modalWindowActive()) {
+                TKeypress keypressLowercase = keypress.getKey().toLowerCase();
+                TMenuItem item = null;
+                synchronized (accelerators) {
+                    item = accelerators.get(keypressLowercase);
+                }
+                if (item != null) {
+                    if (item.isEnabled()) {
+                        // Let the menu item dispatch
+                        item.dispatch();
+                        return;
+                    }
+                }
+
+                // Handle the keypress
+                if (onKeypress(keypress)) {
+                    return;
+                }
+            }
+        }
+
+        if (event instanceof TCommandEvent) {
+            if (onCommand((TCommandEvent) event)) {
+                return;
+            }
+        }
+
+        if (event instanceof TMenuEvent) {
+            if (onMenu((TMenuEvent) event)) {
+                return;
+            }
+        }
+
+        // Dispatch events to the active window -------------------------------
+        boolean dispatchToDesktop = true;
+        TWindow window = activeWindow;
+        if (window != null) {
+            assert (window.isActive());
+            assert (window.isShown());
+            if (event instanceof TMouseEvent) {
+                TMouseEvent mouse = (TMouseEvent) event;
+                // Convert the mouse relative x/y to window coordinates
+                assert (mouse.getX() == mouse.getAbsoluteX());
+                assert (mouse.getY() == mouse.getAbsoluteY());
+                mouse.setX(mouse.getX() - window.getX());
+                mouse.setY(mouse.getY() - window.getY());
+
+                if (doubleClick != null) {
+                    doubleClick.setX(doubleClick.getX() - window.getX());
+                    doubleClick.setY(doubleClick.getY() - window.getY());
+                }
+
+                if (window.mouseWouldHit(mouse)) {
+                    dispatchToDesktop = false;
+                }
+            } else if (event instanceof TKeypressEvent) {
+                dispatchToDesktop = false;
+            }
+
+            if (debugEvents) {
+                System.err.printf("TApplication dispatch event: %s\n",
+                    event);
+            }
+            window.handleEvent(event);
+            if (doubleClick != null) {
+                window.handleEvent(doubleClick);
+            }
+        }
+        if (dispatchToDesktop) {
+            // This event is fair game for the desktop to process.
+            if (desktop != null) {
+                desktop.handleEvent(event);
+                if (doubleClick != null) {
+                    desktop.handleEvent(doubleClick);
+                }
+            }
+        }
+    }
+
+    /**
+     * Dispatch one event to the appropriate widget or application-level
+     * event handler.  This is the secondary event handler used by certain
+     * special dialogs (currently TMessageBox and TFileOpenBox).
+     *
+     * @param event the input event to consume
+     * @see #primaryHandleEvent(TInputEvent event)
+     */
+    private void secondaryHandleEvent(final TInputEvent event) {
+        TMouseEvent doubleClick = null;
+
+        // Peek at the mouse position
+        if (event instanceof TMouseEvent) {
+            TMouseEvent mouse = (TMouseEvent) event;
+            if ((mouseX != mouse.getX()) || (mouseY != mouse.getY())) {
+                oldMouseX = mouseX;
+                oldMouseY = mouseY;
+                mouseX = mouse.getX();
+                mouseY = mouse.getY();
+            } else {
+                if (mouse.getType() == TMouseEvent.Type.MOUSE_UP) {
+                    if ((mouse.getTime().getTime() - lastMouseUpTime) <
+                        doubleClickTime) {
+
+                        // This is a double-click.
+                        doubleClick = new TMouseEvent(TMouseEvent.Type.
+                            MOUSE_DOUBLE_CLICK,
+                            mouse.getX(), mouse.getY(),
+                            mouse.getAbsoluteX(), mouse.getAbsoluteY(),
+                            mouse.isMouse1(), mouse.isMouse2(),
+                            mouse.isMouse3(),
+                            mouse.isMouseWheelUp(), mouse.isMouseWheelDown());
+
+                    } else {
+                        // The first click of a potential double-click.
+                        lastMouseUpTime = mouse.getTime().getTime();
+                    }
+                }
+            }
+        }
+
+        secondaryEventReceiver.handleEvent(event);
+        // Note that it is possible for secondaryEventReceiver to be null
+        // now, because its handleEvent() might have finished out on the
+        // secondary thread.  So put any extra processing inside a null
+        // check.
+        if (secondaryEventReceiver != null) {
+            if (doubleClick != null) {
+                secondaryEventReceiver.handleEvent(doubleClick);
+            }
+        }
+    }
+
+    /**
+     * Enable a widget to override the primary event thread.
+     *
+     * @param widget widget that will receive events
+     */
+    public final void enableSecondaryEventReceiver(final TWidget widget) {
+        if (debugThreads) {
+            System.err.println(System.currentTimeMillis() +
+                " enableSecondaryEventReceiver()");
+        }
+
+        assert (secondaryEventReceiver == null);
+        assert (secondaryEventHandler == null);
+        assert ((widget instanceof TMessageBox)
+            || (widget instanceof TFileOpenBox));
+        secondaryEventReceiver = widget;
+        secondaryEventHandler = new WidgetEventHandler(this, false);
+
+        (new Thread(secondaryEventHandler)).start();
+    }
+
+    /**
+     * Yield to the secondary thread.
+     */
+    public final void yield() {
+        assert (secondaryEventReceiver != null);
+
+        while (secondaryEventReceiver != null) {
+            synchronized (primaryEventHandler) {
+                try {
+                    primaryEventHandler.wait();
+                } catch (InterruptedException e) {
+                    // SQUASH
+                }
+            }
+        }
+    }
+
+    /**
+     * Do stuff when there is no user input.
+     */
+    private void doIdle() {
+        if (debugThreads) {
+            System.err.printf(System.currentTimeMillis() + " " +
+                Thread.currentThread() + " doIdle()\n");
+        }
+
+        synchronized (timers) {
+
+            if (debugThreads) {
+                System.err.printf(System.currentTimeMillis() + " " +
+                    Thread.currentThread() + " doIdle() 2\n");
+            }
+
+            // Run any timers that have timed out
+            Date now = new Date();
+            List<TTimer> keepTimers = new LinkedList<TTimer>();
+            for (TTimer timer: timers) {
+                if (timer.getNextTick().getTime() <= now.getTime()) {
+                    // Something might change, so repaint the screen.
+                    repaint = true;
+                    timer.tick();
+                    if (timer.recurring) {
+                        keepTimers.add(timer);
+                    }
+                } else {
+                    keepTimers.add(timer);
+                }
+            }
+            timers.clear();
+            timers.addAll(keepTimers);
+        }
+
+        // Call onIdle's
+        for (TWindow window: windows) {
+            window.onIdle();
+        }
+        if (desktop != null) {
+            desktop.onIdle();
+        }
+    }
+
+    /**
+     * Wake the sleeping active event handler.
+     */
+    private void wakeEventHandler() {
+        if (!started) {
+            return;
+        }
+
+        if (secondaryEventHandler != null) {
+            synchronized (secondaryEventHandler) {
+                secondaryEventHandler.notify();
+            }
+        } else {
+            assert (primaryEventHandler != null);
+            synchronized (primaryEventHandler) {
+                primaryEventHandler.notify();
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // TApplication -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get the Backend.
+     *
+     * @return the Backend
+     */
+    public final Backend getBackend() {
+        return backend;
+    }
+
+    /**
+     * Get the Screen.
+     *
+     * @return the Screen
+     */
+    public final Screen getScreen() {
+        if (backend instanceof TWindowBackend) {
+            // We are being rendered to a TWindow.  We can't use its
+            // getScreen() method because that is how it is rendering to a
+            // hardware backend somewhere.  Instead use its getOtherScreen()
+            // method.
+            return ((TWindowBackend) backend).getOtherScreen();
+        } else {
+            return backend.getScreen();
+        }
+    }
+
+    /**
+     * Get the color theme.
+     *
+     * @return the theme
+     */
+    public final ColorTheme getTheme() {
+        return theme;
+    }
+
+    /**
+     * Repaint the screen on the next update.
+     */
+    public void doRepaint() {
+        repaint = true;
+        wakeEventHandler();
+    }
+
+    /**
+     * Get Y coordinate of the top edge of the desktop.
+     *
+     * @return Y coordinate of the top edge of the desktop
+     */
+    public final int getDesktopTop() {
+        return desktopTop;
+    }
+
+    /**
+     * Get Y coordinate of the bottom edge of the desktop.
+     *
+     * @return Y coordinate of the bottom edge of the desktop
+     */
+    public final int getDesktopBottom() {
+        return desktopBottom;
+    }
+
+    /**
+     * Set the TDesktop instance.
+     *
+     * @param desktop a TDesktop instance, or null to remove the one that is
+     * set
+     */
+    public final void setDesktop(final TDesktop desktop) {
+        if (this.desktop != null) {
+            this.desktop.onClose();
+        }
+        this.desktop = desktop;
+    }
+
+    /**
+     * Get the TDesktop instance.
+     *
+     * @return the desktop, or null if it is not set
+     */
+    public final TDesktop getDesktop() {
+        return desktop;
+    }
+
+    /**
+     * Get the current active window.
+     *
+     * @return the active window, or null if it is not set
+     */
+    public final TWindow getActiveWindow() {
+        return activeWindow;
+    }
+
+    /**
+     * Get a (shallow) copy of the window list.
+     *
+     * @return a copy of the list of windows for this application
+     */
+    public final List<TWindow> getAllWindows() {
+        List<TWindow> result = new LinkedList<TWindow>();
+        result.addAll(windows);
+        return result;
+    }
+
+    /**
+     * Get focusFollowsMouse flag.
+     *
+     * @return true if focus follows mouse: windows automatically raised if
+     * the mouse passes over them
+     */
+    public boolean getFocusFollowsMouse() {
+        return focusFollowsMouse;
+    }
+
+    /**
+     * Set focusFollowsMouse flag.
+     *
+     * @param focusFollowsMouse if true, focus follows mouse: windows
+     * automatically raised if the mouse passes over them
+     */
+    public void setFocusFollowsMouse(final boolean focusFollowsMouse) {
+        this.focusFollowsMouse = focusFollowsMouse;
+    }
+
+    /**
+     * Display the about dialog.
+     */
+    protected void showAboutDialog() {
+        messageBox(i18n.getString("aboutDialogTitle"),
+            MessageFormat.format(i18n.getString("aboutDialogText"),
+                this.getClass().getPackage().getImplementationVersion()),
+            TMessageBox.Type.OK);
     }
 
     // ------------------------------------------------------------------------
@@ -668,11 +1379,20 @@ public class TApplication implements Runnable {
      */
     private void invertCell(final int x, final int y) {
         if (debugThreads) {
-            System.err.printf("invertCell() %d %d\n", x, y);
+            System.err.printf("%d %s invertCell() %d %d\n",
+                System.currentTimeMillis(), Thread.currentThread(), x, y);
         }
         CellAttributes attr = getScreen().getAttrXY(x, y);
-        attr.setForeColor(attr.getForeColor().invert());
-        attr.setBackColor(attr.getBackColor().invert());
+        if (attr.getForeColorRGB() < 0) {
+            attr.setForeColor(attr.getForeColor().invert());
+        } else {
+            attr.setForeColorRGB(attr.getForeColorRGB() ^ 0x00ffffff);
+        }
+        if (attr.getBackColorRGB() < 0) {
+            attr.setBackColor(attr.getBackColor().invert());
+        } else {
+            attr.setBackColorRGB(attr.getBackColorRGB() ^ 0x00ffffff);
+        }
         getScreen().putAttrXY(x, y, attr, false);
     }
 
@@ -680,13 +1400,17 @@ public class TApplication implements Runnable {
      * Draw everything.
      */
     private void drawAll() {
+        boolean menuIsActive = false;
+
         if (debugThreads) {
-            System.err.printf("drawAll() enter\n");
+            System.err.printf("%d %s drawAll() enter\n",
+                System.currentTimeMillis(), Thread.currentThread());
         }
 
         if (!repaint) {
             if (debugThreads) {
-                System.err.printf("drawAll() !repaint\n");
+                System.err.printf("%d %s drawAll() !repaint\n",
+                    System.currentTimeMillis(), Thread.currentThread());
             }
             synchronized (getScreen()) {
                 if ((oldMouseX != mouseX) || (oldMouseY != mouseY)) {
@@ -705,7 +1429,8 @@ public class TApplication implements Runnable {
         }
 
         if (debugThreads) {
-            System.err.printf("drawAll() REDRAW\n");
+            System.err.printf("%d %s drawAll() REDRAW\n",
+                System.currentTimeMillis(), Thread.currentThread());
         }
 
         // If true, the cursor is not visible
@@ -714,9 +1439,10 @@ public class TApplication implements Runnable {
         // Start with a clean screen
         getScreen().clear();
 
-        // Draw the background
-        CellAttributes background = theme.getColor("tapplication.background");
-        getScreen().putAll(GraphicsChars.HATCH, background);
+        // Draw the desktop
+        if (desktop != null) {
+            desktop.drawChildren();
+        }
 
         // Draw each window in reverse Z order
         List<TWindow> sorted = new LinkedList<TWindow>(windows);
@@ -727,7 +1453,9 @@ public class TApplication implements Runnable {
         }
         Collections.reverse(sorted);
         for (TWindow window: sorted) {
-            window.drawChildren();
+            if (window.isShown()) {
+                window.drawChildren();
+            }
         }
 
         // Draw the blank menubar line - reset the screen clipping first so
@@ -741,6 +1469,7 @@ public class TApplication implements Runnable {
             CellAttributes menuColor;
             CellAttributes menuMnemonicColor;
             if (menu.isActive()) {
+                menuIsActive = true;
                 menuColor = theme.getColor("tmenu.highlighted");
                 menuMnemonicColor = theme.getColor("tmenu.mnemonic.highlighted");
                 topLevel = menu;
@@ -793,13 +1522,25 @@ public class TApplication implements Runnable {
         oldMouseY = mouseY;
 
         // Place the cursor if it is visible
-        TWidget activeWidget = null;
-        if (sorted.size() > 0) {
-            activeWidget = sorted.get(sorted.size() - 1).getActiveChild();
-            if (activeWidget.isCursorVisible()) {
-                getScreen().putCursor(true, activeWidget.getCursorAbsoluteX(),
-                    activeWidget.getCursorAbsoluteY());
-                cursor = true;
+        if (!menuIsActive) {
+            TWidget activeWidget = null;
+            if (sorted.size() > 0) {
+                activeWidget = sorted.get(sorted.size() - 1).getActiveChild();
+                if (activeWidget.isCursorVisible()) {
+                    if ((activeWidget.getCursorAbsoluteY() < desktopBottom)
+                        && (activeWidget.getCursorAbsoluteY() > desktopTop)
+                    ) {
+                        getScreen().putCursor(true,
+                            activeWidget.getCursorAbsoluteX(),
+                            activeWidget.getCursorAbsoluteY());
+                        cursor = true;
+                    } else {
+                        getScreen().putCursor(false,
+                            activeWidget.getCursorAbsoluteX(),
+                            activeWidget.getCursorAbsoluteY());
+                        cursor = false;
+                    }
+                }
             }
         }
 
@@ -816,379 +1557,238 @@ public class TApplication implements Runnable {
         repaint = false;
     }
 
-    // ------------------------------------------------------------------------
-    // Main loop --------------------------------------------------------------
-    // ------------------------------------------------------------------------
-
     /**
-     * Run this application until it exits.
+     * Force this application to exit.
      */
-    public void run() {
-        while (!quit) {
-            // Timeout is in milliseconds, so default timeout after 1 second
-            // of inactivity.
-            long timeout = 0;
-
-            // If I've got no updates to render, wait for something from the
-            // backend or a timer.
-            if (!repaint
-                && ((mouseX == oldMouseX) && (mouseY == oldMouseY))
-            ) {
-                // Never sleep longer than 50 millis.  We need time for
-                // windows with background tasks to update the display, and
-                // still flip buffers reasonably quickly in
-                // backend.flushPhysical().
-                timeout = getSleepTime(50);
-            }
-
-            if (timeout > 0) {
-                // As of now, I've got nothing to do: no I/O, nothing from
-                // the consumer threads, no timers that need to run ASAP.  So
-                // wait until either the backend or the consumer threads have
-                // something to do.
-                try {
-                    if (debugThreads) {
-                        System.err.println("sleep " + timeout + " millis");
-                    }
-                    synchronized (this) {
-                        this.wait(timeout);
-                    }
-                } catch (InterruptedException e) {
-                    // I'm awake and don't care why, let's see what's going
-                    // on out there.
-                }
-                repaint = true;
-            }
-
-            // Prevent stepping on the primary or secondary event handler.
-            stopEventHandlers();
-
-            // Pull any pending I/O events
-            backend.getEvents(fillEventQueue);
-
-            // Dispatch each event to the appropriate handler, one at a time.
-            for (;;) {
-                TInputEvent event = null;
-                if (fillEventQueue.size() == 0) {
-                    break;
-                }
-                event = fillEventQueue.remove(0);
-                metaHandleEvent(event);
-            }
-
-            // Wake a consumer thread if we have any pending events.
-            if (drainEventQueue.size() > 0) {
-                wakeEventHandler();
-            }
-
-            // Process timers and call doIdle()'s
-            doIdle();
-
-            // Update the screen
-            synchronized (getScreen()) {
-                drawAll();
-            }
-
-            // Let the event handlers run again.
-            startEventHandlers();
-
-        } // while (!quit)
-
-        // Shutdown the event consumer threads
-        if (secondaryEventHandler != null) {
-            synchronized (secondaryEventHandler) {
-                secondaryEventHandler.notify();
-            }
-        }
-        if (primaryEventHandler != null) {
-            synchronized (primaryEventHandler) {
-                primaryEventHandler.notify();
-            }
-        }
-
-        // Shutdown the user I/O thread(s)
-        backend.shutdown();
-
-        // Close all the windows.  This gives them an opportunity to release
-        // resources.
-        closeAllWindows();
-
-    }
-
-    /**
-     * Peek at certain application-level events, add to eventQueue, and wake
-     * up the consuming Thread.
-     *
-     * @param event the input event to consume
-     */
-    private void metaHandleEvent(final TInputEvent event) {
-
-        if (debugEvents) {
-            System.err.printf(String.format("metaHandleEvents event: %s\n",
-                    event)); System.err.flush();
-        }
-
-        if (quit) {
-            // Do no more processing if the application is already trying
-            // to exit.
-            return;
-        }
-
-        // Special application-wide events -------------------------------
-
-        // Abort everything
-        if (event instanceof TCommandEvent) {
-            TCommandEvent command = (TCommandEvent) event;
-            if (command.getCmd().equals(cmAbort)) {
-                quit = true;
-                return;
-            }
-        }
-
-        // Screen resize
-        if (event instanceof TResizeEvent) {
-            TResizeEvent resize = (TResizeEvent) event;
-            synchronized (getScreen()) {
-                getScreen().setDimensions(resize.getWidth(),
-                    resize.getHeight());
-                desktopBottom = getScreen().getHeight() - 1;
-                mouseX = 0;
-                mouseY = 0;
-                oldMouseX = 0;
-                oldMouseY = 0;
-            }
-            return;
-        }
-
-        // Peek at the mouse position
-        if (event instanceof TMouseEvent) {
-            TMouseEvent mouse = (TMouseEvent) event;
-            synchronized (getScreen()) {
-                if ((mouseX != mouse.getX()) || (mouseY != mouse.getY())) {
-                    oldMouseX = mouseX;
-                    oldMouseY = mouseY;
-                    mouseX = mouse.getX();
-                    mouseY = mouse.getY();
-                }
-            }
-        }
-
-        // Put into the main queue
-        drainEventQueue.add(event);
-    }
-
-    /**
-     * Dispatch one event to the appropriate widget or application-level
-     * event handler.  This is the primary event handler, it has the normal
-     * application-wide event handling.
-     *
-     * @param event the input event to consume
-     * @see #secondaryHandleEvent(TInputEvent event)
-     */
-    private void primaryHandleEvent(final TInputEvent event) {
-
-        if (debugEvents) {
-            System.err.printf("Handle event: %s\n", event);
-        }
-
-        // Special application-wide events -----------------------------------
-
-        // Peek at the mouse position
-        if (event instanceof TMouseEvent) {
-            // See if we need to switch focus to another window or the menu
-            checkSwitchFocus((TMouseEvent) event);
-        }
-
-        // Handle menu events
-        if ((activeMenu != null) && !(event instanceof TCommandEvent)) {
-            TMenu menu = activeMenu;
-
-            if (event instanceof TMouseEvent) {
-                TMouseEvent mouse = (TMouseEvent) event;
-
-                while (subMenus.size() > 0) {
-                    TMenu subMenu = subMenus.get(subMenus.size() - 1);
-                    if (subMenu.mouseWouldHit(mouse)) {
-                        break;
-                    }
-                    if ((mouse.getType() == TMouseEvent.Type.MOUSE_MOTION)
-                        && (!mouse.isMouse1())
-                        && (!mouse.isMouse2())
-                        && (!mouse.isMouse3())
-                        && (!mouse.isMouseWheelUp())
-                        && (!mouse.isMouseWheelDown())
-                    ) {
-                        break;
-                    }
-                    // We navigated away from a sub-menu, so close it
-                    closeSubMenu();
-                }
-
-                // Convert the mouse relative x/y to menu coordinates
-                assert (mouse.getX() == mouse.getAbsoluteX());
-                assert (mouse.getY() == mouse.getAbsoluteY());
-                if (subMenus.size() > 0) {
-                    menu = subMenus.get(subMenus.size() - 1);
-                }
-                mouse.setX(mouse.getX() - menu.getX());
-                mouse.setY(mouse.getY() - menu.getY());
-            }
-            menu.handleEvent(event);
-            return;
-        }
-
-        if (event instanceof TKeypressEvent) {
-            TKeypressEvent keypress = (TKeypressEvent) event;
-
-            // See if this key matches an accelerator, and is not being
-            // shortcutted by the active window, and if so dispatch the menu
-            // event.
-            boolean windowWillShortcut = false;
-            for (TWindow window: windows) {
-                if (window.isActive()) {
-                    if (window.isShortcutKeypress(keypress.getKey())) {
-                        // We do not process this key, it will be passed to
-                        // the window instead.
-                        windowWillShortcut = true;
-                    }
-                }
-            }
-
-            if (!windowWillShortcut && !modalWindowActive()) {
-                TKeypress keypressLowercase = keypress.getKey().toLowerCase();
-                TMenuItem item = null;
-                synchronized (accelerators) {
-                    item = accelerators.get(keypressLowercase);
-                }
-                if (item != null) {
-                    if (item.isEnabled()) {
-                        // Let the menu item dispatch
-                        item.dispatch();
-                        return;
-                    }
-                }
-
-                // Handle the keypress
-                if (onKeypress(keypress)) {
-                    return;
-                }
-            }
-        }
-
-        if (event instanceof TCommandEvent) {
-            if (onCommand((TCommandEvent) event)) {
-                return;
-            }
-        }
-
-        if (event instanceof TMenuEvent) {
-            if (onMenu((TMenuEvent) event)) {
-                return;
-            }
-        }
-
-        // Dispatch events to the active window -------------------------------
-        for (TWindow window: windows) {
-            if (window.isActive()) {
-                if (event instanceof TMouseEvent) {
-                    TMouseEvent mouse = (TMouseEvent) event;
-                    // Convert the mouse relative x/y to window coordinates
-                    assert (mouse.getX() == mouse.getAbsoluteX());
-                    assert (mouse.getY() == mouse.getAbsoluteY());
-                    mouse.setX(mouse.getX() - window.getX());
-                    mouse.setY(mouse.getY() - window.getY());
-                }
-                if (debugEvents) {
-                    System.err.printf("TApplication dispatch event: %s\n",
-                        event);
-                }
-                window.handleEvent(event);
-                break;
-            }
-        }
-    }
-    /**
-     * Dispatch one event to the appropriate widget or application-level
-     * event handler.  This is the secondary event handler used by certain
-     * special dialogs (currently TMessageBox and TFileOpenBox).
-     *
-     * @param event the input event to consume
-     * @see #primaryHandleEvent(TInputEvent event)
-     */
-    private void secondaryHandleEvent(final TInputEvent event) {
-        secondaryEventReceiver.handleEvent(event);
-    }
-
-    /**
-     * Enable a widget to override the primary event thread.
-     *
-     * @param widget widget that will receive events
-     */
-    public final void enableSecondaryEventReceiver(final TWidget widget) {
-        assert (secondaryEventReceiver == null);
-        assert (secondaryEventHandler == null);
-        assert ((widget instanceof TMessageBox)
-            || (widget instanceof TFileOpenBox));
-        secondaryEventReceiver = widget;
-        secondaryEventHandler = new WidgetEventHandler(this, false);
-        (new Thread(secondaryEventHandler)).start();
-    }
-
-    /**
-     * Yield to the secondary thread.
-     */
-    public final void yield() {
-        assert (secondaryEventReceiver != null);
-        // This is where we handoff the event handler lock from the primary
-        // to secondary thread.  We unlock here, and in a future loop the
-        // secondary thread locks again.  When it gives up, we have the
-        // single lock back.
-        boolean oldLock = unlockHandleEvent();
-        assert (oldLock);
-
-        while (secondaryEventReceiver != null) {
-            synchronized (primaryEventHandler) {
-                try {
-                    primaryEventHandler.wait();
-                } catch (InterruptedException e) {
-                    // SQUASH
-                }
-            }
+    public void exit() {
+        quit = true;
+        synchronized (this) {
+            this.notify();
         }
     }
 
-    /**
-     * Do stuff when there is no user input.
-     */
-    private void doIdle() {
-        if (debugThreads) {
-            System.err.printf("doIdle()\n");
-        }
+	/**
+	 * Exit the application (the effects are not immediate, the process is just
+	 * notified that it should exit at its earliest convenience).
+	 * 
+	 * @param askConfirmation
+	 *            interactively ask confirmation to the user with a default,
+	 *            hard-coded English message
+	 * 
+	 * @return TRUE if the process is in shutting-down mode after this call
+	 */
+	public boolean exit(boolean askConfirmation) {
+		if (!askConfirmation
+				|| messageBox(i18n.getString("exitDialogTitle"),
+						i18n.getString("exitDialogText"),
+						TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
+			exit();
+		}
 
-        // Now run any timers that have timed out
-        Date now = new Date();
-        List<TTimer> keepTimers = new LinkedList<TTimer>();
-        for (TTimer timer: timers) {
-            if (timer.getNextTick().getTime() <= now.getTime()) {
-                timer.tick();
-                if (timer.recurring) {
-                    keepTimers.add(timer);
-                }
-            } else {
-                keepTimers.add(timer);
-            }
-        }
-        timers = keepTimers;
-
-        // Call onIdle's
-        for (TWindow window: windows) {
-            window.onIdle();
-        }
-    }
+		return quit;
+	}
 
     // ------------------------------------------------------------------------
     // TWindow management -----------------------------------------------------
     // ------------------------------------------------------------------------
+
+    /**
+     * Return the total number of windows.
+     *
+     * @return the total number of windows
+     */
+    public final int windowCount() {
+        return windows.size();
+    }
+
+    /**
+     * Return the number of windows that are showing.
+     *
+     * @return the number of windows that are showing on screen
+     */
+    public final int shownWindowCount() {
+        int n = 0;
+        for (TWindow w: windows) {
+            if (w.isShown()) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Return the number of windows that are hidden.
+     *
+     * @return the number of windows that are hidden
+     */
+    public final int hiddenWindowCount() {
+        int n = 0;
+        for (TWindow w: windows) {
+            if (w.isHidden()) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Check if a window instance is in this application's window list.
+     *
+     * @param window window to look for
+     * @return true if this window is in the list
+     */
+    public final boolean hasWindow(final TWindow window) {
+        if (windows.size() == 0) {
+            return false;
+        }
+        for (TWindow w: windows) {
+            if (w == window) {
+                assert (window.getApplication() == this);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Activate a window: bring it to the top and have it receive events.
+     *
+     * @param window the window to become the new active window
+     */
+    public void activateWindow(final TWindow window) {
+        if (hasWindow(window) == false) {
+            /*
+             * Someone has a handle to a window I don't have.  Ignore this
+             * request.
+             */
+            return;
+        }
+
+        // Whatever window might be moving/dragging, stop it now.
+        for (TWindow w: windows) {
+            if (w.inMovements()) {
+                w.stopMovements();
+            }
+        }
+
+        assert (windows.size() > 0);
+
+        if (window.isHidden()) {
+            // Unhiding will also activate.
+            showWindow(window);
+            return;
+        }
+        assert (window.isShown());
+
+        if (windows.size() == 1) {
+            assert (window == windows.get(0));
+            if (activeWindow == null) {
+                activeWindow = window;
+                window.setZ(0);
+                activeWindow.setActive(true);
+                activeWindow.onFocus();
+            }
+
+            assert (window.isActive());
+            assert (activeWindow == window);
+            return;
+        }
+
+        if (activeWindow == window) {
+            assert (window.isActive());
+
+            // Window is already active, do nothing.
+            return;
+        }
+
+        assert (!window.isActive());
+        if (activeWindow != null) {
+            assert (activeWindow.getZ() == 0);
+
+            activeWindow.setActive(false);
+            activeWindow.setZ(window.getZ());
+
+            // Unset activeWindow now before unfocus, so that a window
+            // lifecycle change inside onUnfocus() doesn't call
+            // switchWindow() and lead to a stack overflow.
+            TWindow oldActiveWindow = activeWindow;
+            activeWindow = null;
+            oldActiveWindow.onUnfocus();
+        }
+        activeWindow = window;
+        activeWindow.setZ(0);
+        activeWindow.setActive(true);
+        activeWindow.onFocus();
+        return;
+    }
+
+    /**
+     * Hide a window.
+     *
+     * @param window the window to hide
+     */
+    public void hideWindow(final TWindow window) {
+        if (hasWindow(window) == false) {
+            /*
+             * Someone has a handle to a window I don't have.  Ignore this
+             * request.
+             */
+            return;
+        }
+
+        // Whatever window might be moving/dragging, stop it now.
+        for (TWindow w: windows) {
+            if (w.inMovements()) {
+                w.stopMovements();
+            }
+        }
+
+        assert (windows.size() > 0);
+
+        if (!window.hidden) {
+            if (window == activeWindow) {
+                if (shownWindowCount() > 1) {
+                    switchWindow(true);
+                } else {
+                    activeWindow = null;
+                    window.setActive(false);
+                    window.onUnfocus();
+                }
+            }
+            window.hidden = true;
+            window.onHide();
+        }
+    }
+
+    /**
+     * Show a window.
+     *
+     * @param window the window to show
+     */
+    public void showWindow(final TWindow window) {
+        if (hasWindow(window) == false) {
+            /*
+             * Someone has a handle to a window I don't have.  Ignore this
+             * request.
+             */
+            return;
+        }
+
+        // Whatever window might be moving/dragging, stop it now.
+        for (TWindow w: windows) {
+            if (w.inMovements()) {
+                w.stopMovements();
+            }
+        }
+
+        assert (windows.size() > 0);
+
+        if (window.hidden) {
+            window.hidden = false;
+            window.onShow();
+            activateWindow(window);
+        }
+    }
 
     /**
      * Close window.  Note that the window's destructor is NOT called by this
@@ -1202,14 +1802,35 @@ public class TApplication implements Runnable {
     		return;
     	}
     	
+        if (hasWindow(window) == false) {
+            /*
+             * Someone has a handle to a window I don't have.  Ignore this
+             * request.
+             */
+            return;
+        }
+
         synchronized (windows) {
+            // Whatever window might be moving/dragging, stop it now.
+            for (TWindow w: windows) {
+                if (w.inMovements()) {
+                    w.stopMovements();
+                }
+            }
+
             int z = window.getZ();
             window.setZ(-1);
             window.onUnfocus();
             Collections.sort(windows);
             windows.remove(0);
-            TWindow activeWindow = null;
+            activeWindow = null;
             for (TWindow w: windows) {
+
+                // Do not activate a hidden window.
+                if (w.isHidden()) {
+                    continue;
+                }
+
                 if (w.getZ() > z) {
                     w.setZ(w.getZ() - 1);
                     if (w.getZ() == 0) {
@@ -1244,6 +1865,13 @@ public class TApplication implements Runnable {
                 secondaryEventHandler.notify();
             }
         }
+
+        // Permit desktop to be active if it is the only thing left.
+        if (desktop != null) {
+            if (windows.size() == 0) {
+                desktop.setActive(true);
+            }
+        }
     }
 
     /**
@@ -1253,86 +1881,127 @@ public class TApplication implements Runnable {
      * otherwise switch to the previous window in the list
      */
     public final void switchWindow(final boolean forward) {
-        // Only switch if there are multiple windows
-        if (windows.size() < 2) {
+        // Only switch if there are multiple visible windows
+        if (shownWindowCount() < 2) {
             return;
         }
+        assert (activeWindow != null);
 
         synchronized (windows) {
+            // Whatever window might be moving/dragging, stop it now.
+            for (TWindow w: windows) {
+                if (w.inMovements()) {
+                    w.stopMovements();
+                }
+            }
 
             // Swap z/active between active window and the next in the list
             int activeWindowI = -1;
             for (int i = 0; i < windows.size(); i++) {
-                if (windows.get(i).isActive()) {
+                if (windows.get(i) == activeWindow) {
+                    assert (activeWindow.isActive());
                     activeWindowI = i;
                     break;
+                } else {
+                    assert (!windows.get(0).isActive());
                 }
             }
             assert (activeWindowI >= 0);
 
             // Do not switch if a window is modal
-            if (windows.get(activeWindowI).isModal()) {
+            if (activeWindow.isModal()) {
                 return;
             }
 
-            int nextWindowI;
-            if (forward) {
-                nextWindowI = (activeWindowI + 1) % windows.size();
-            } else {
-                if (activeWindowI == 0) {
-                    nextWindowI = windows.size() - 1;
+            int nextWindowI = activeWindowI;
+            for (;;) {
+                if (forward) {
+                    nextWindowI++;
+                    nextWindowI %= windows.size();
                 } else {
-                    nextWindowI = activeWindowI - 1;
+                    nextWindowI--;
+                    if (nextWindowI < 0) {
+                        nextWindowI = windows.size() - 1;
+                    }
+                }
+
+                if (windows.get(nextWindowI).isShown()) {
+                    activateWindow(windows.get(nextWindowI));
+                    break;
                 }
             }
-            windows.get(activeWindowI).setActive(false);
-            windows.get(activeWindowI).setZ(windows.get(nextWindowI).getZ());
-            windows.get(activeWindowI).onUnfocus();
-            windows.get(nextWindowI).setZ(0);
-            windows.get(nextWindowI).setActive(true);
-            windows.get(nextWindowI).onFocus();
-
         } // synchronized (windows)
 
     }
 
     /**
-     * Add a window to my window list and make it active.
+     * Add a window to my window list and make it active.  Note package
+     * private access.
      *
      * @param window new window to add
      */
-    public final void addWindow(final TWindow window) {
+    final void addWindowToApplication(final TWindow window) {
 
         // Do not add menu windows to the window list.
         if (window instanceof TMenu) {
             return;
         }
 
+        // Do not add the desktop to the window list.
+        if (window instanceof TDesktop) {
+            return;
+        }
+
         synchronized (windows) {
+            if (windows.contains(window)) {
+                throw new IllegalArgumentException("Window " + window +
+                    " is already in window list");
+            }
+
+            // Whatever window might be moving/dragging, stop it now.
+            for (TWindow w: windows) {
+                if (w.inMovements()) {
+                    w.stopMovements();
+                }
+            }
+
             // Do not allow a modal window to spawn a non-modal window.  If a
             // modal window is active, then this window will become modal
             // too.
             if (modalWindowActive()) {
                 window.flags |= TWindow.MODAL;
                 window.flags |= TWindow.CENTERED;
+                window.hidden = false;
             }
-            for (TWindow w: windows) {
-                if (w.isActive()) {
-                    w.setActive(false);
-                    w.onUnfocus();
+            if (window.isShown()) {
+                for (TWindow w: windows) {
+                    if (w.isActive()) {
+                        w.setActive(false);
+                        w.onUnfocus();
+                    }
+                    w.setZ(w.getZ() + 1);
                 }
-                w.setZ(w.getZ() + 1);
             }
             windows.add(window);
-            window.setZ(0);
-            window.setActive(true);
-            window.onFocus();
+            if (window.isShown()) {
+                activeWindow = window;
+                activeWindow.setZ(0);
+                activeWindow.setActive(true);
+                activeWindow.onFocus();
+            }
 
             if (((window.flags & TWindow.CENTERED) == 0)
-                && smartWindowPlacement) {
+                && ((window.flags & TWindow.ABSOLUTEXY) == 0)
+                && (smartWindowPlacement == true)
+            ) {
 
                 doSmartPlacement(window);
             }
+        }
+
+        // Desktop cannot be active over any other window.
+        if (desktop != null) {
+            desktop.setActive(false);
         }
     }
 
@@ -1363,8 +2032,8 @@ public class TApplication implements Runnable {
         if (activeMenu != null) {
             return;
         }
-        for (TWindow window : new ArrayList<TWindow>(windows)) {
-            closeWindow(window);
+        while (windows.size() > 0) {
+            closeWindow(windows.get(0));
         }
     }
 
@@ -1412,6 +2081,9 @@ public class TApplication implements Runnable {
                 }
 
                 TWindow w = sorted.get(i);
+                int oldWidth = w.getWidth();
+                int oldHeight = w.getHeight();
+
                 w.setX(logicalX * newWidth);
                 w.setWidth(newWidth);
                 if (i >= ((a - 1) * b)) {
@@ -1420,6 +2092,12 @@ public class TApplication implements Runnable {
                 } else {
                     w.setY((logicalY * newHeight1) + 1);
                     w.setHeight(newHeight1);
+                }
+                if ((w.getWidth() != oldWidth)
+                    || (w.getHeight() != oldHeight)
+                ) {
+                    w.onResize(new TResizeEvent(TResizeEvent.Type.WIDGET,
+                            w.getWidth(), w.getHeight()));
                 }
             }
         }
@@ -1488,11 +2166,17 @@ public class TApplication implements Runnable {
                 continue;
             }
             for (int x = w.getX(); x < w.getX() + w.getWidth(); x++) {
-                if (x == width) {
+                if (x < 0) {
+                    continue;
+                }
+                if (x >= width) {
                     continue;
                 }
                 for (int y = w.getY(); y < w.getY() + w.getHeight(); y++) {
-                    if (y == height) {
+                    if (y < 0) {
+                        continue;
+                    }
+                    if (y >= height) {
                         continue;
                     }
                     overlapMatrix[x][y]++;
@@ -1535,11 +2219,11 @@ public class TApplication implements Runnable {
                 long newOverlapN = 0;
                 // Start by adding each new cell.
                 for (int wx = x; wx < x + window.getWidth(); wx++) {
-                    if (wx == width) {
+                    if (wx >= width) {
                         continue;
                     }
                     for (int wy = y; wy < y + window.getHeight(); wy++) {
-                        if (wy == height) {
+                        if (wy >= height) {
                             continue;
                         }
                         newMatrix[wx][wy]++;
@@ -1640,8 +2324,8 @@ public class TApplication implements Runnable {
 
             // They selected the menu, go activate it
             for (TMenu menu: menus) {
-                if ((mouse.getAbsoluteX() >= menu.getX())
-                    && (mouse.getAbsoluteX() < menu.getX()
+                if ((mouse.getAbsoluteX() >= menu.getTitleX())
+                    && (mouse.getAbsoluteX() < menu.getTitleX()
                         + menu.getTitle().length() + 2)
                 ) {
                     menu.setActive(true);
@@ -1668,8 +2352,8 @@ public class TApplication implements Runnable {
 
             // See if we should switch menus
             for (TMenu menu: menus) {
-                if ((mouse.getAbsoluteX() >= menu.getX())
-                    && (mouse.getAbsoluteX() < menu.getX()
+                if ((mouse.getAbsoluteX() >= menu.getTitleX())
+                    && (mouse.getAbsoluteX() < menu.getTitleX()
                         + menu.getTitle().length() + 2)
                 ) {
                     menu.setActive(true);
@@ -1683,46 +2367,64 @@ public class TApplication implements Runnable {
             return;
         }
 
+        // If a menu is still active, don't switch windows
+        if (activeMenu != null) {
+            return;
+        }
+
         // Only switch if there are multiple windows
         if (windows.size() < 2) {
             return;
         }
 
-        // Switch on the upclick
-        if (mouse.getType() != TMouseEvent.Type.MOUSE_UP) {
+        if (((focusFollowsMouse == true)
+                && (mouse.getType() == TMouseEvent.Type.MOUSE_MOTION))
+            || (mouse.getType() == TMouseEvent.Type.MOUSE_UP)
+        ) {
+            synchronized (windows) {
+                Collections.sort(windows);
+                if (windows.get(0).isModal()) {
+                    // Modal windows don't switch
+                    return;
+                }
+
+                for (TWindow window: windows) {
+                    assert (!window.isModal());
+
+                    if (window.isHidden()) {
+                        assert (!window.isActive());
+                        continue;
+                    }
+
+                    if (window.mouseWouldHit(mouse)) {
+                        if (window == windows.get(0)) {
+                            // Clicked on the same window, nothing to do
+                            assert (window.isActive());
+                            return;
+                        }
+
+                        // We will be switching to another window
+                        assert (windows.get(0).isActive());
+                        assert (windows.get(0) == activeWindow);
+                        assert (!window.isActive());
+                        activeWindow.onUnfocus();
+                        activeWindow.setActive(false);
+                        activeWindow.setZ(window.getZ());
+                        activeWindow = window;
+                        window.setZ(0);
+                        window.setActive(true);
+                        window.onFocus();
+                        return;
+                    }
+                }
+            }
+
+            // Clicked on the background, nothing to do
             return;
         }
 
-        synchronized (windows) {
-            Collections.sort(windows);
-            if (windows.get(0).isModal()) {
-                // Modal windows don't switch
-                return;
-            }
-
-            for (TWindow window: windows) {
-                assert (!window.isModal());
-                if (window.mouseWouldHit(mouse)) {
-                    if (window == windows.get(0)) {
-                        // Clicked on the same window, nothing to do
-                        return;
-                    }
-
-                    // We will be switching to another window
-                    assert (windows.get(0).isActive());
-                    assert (!window.isActive());
-                    windows.get(0).onUnfocus();
-                    windows.get(0).setActive(false);
-                    windows.get(0).setZ(window.getZ());
-                    window.setZ(0);
-                    window.setActive(true);
-                    window.onFocus();
-                    return;
-                }
-            }
-        }
-
-        // Clicked on the background, nothing to do
+        // Nothing to do: this isn't a mouse up, or focus isn't following
+        // mouse.
         return;
     }
 
@@ -1738,6 +2440,53 @@ public class TApplication implements Runnable {
             }
             subMenus.clear();
         }
+    }
+
+    /**
+     * Get a (shallow) copy of the menu list.
+     *
+     * @return a copy of the menu list
+     */
+    public final List<TMenu> getAllMenus() {
+        return new LinkedList<TMenu>(menus);
+    }
+
+    /**
+     * Add a top-level menu to the list.
+     *
+     * @param menu the menu to add
+     * @throws IllegalArgumentException if the menu is already used in
+     * another TApplication
+     */
+    public final void addMenu(final TMenu menu) {
+        if ((menu.getApplication() != null)
+            && (menu.getApplication() != this)
+        ) {
+            throw new IllegalArgumentException("Menu " + menu + " is already " +
+                "part of application " + menu.getApplication());
+        }
+        closeMenu();
+        menus.add(menu);
+        recomputeMenuX();
+    }
+
+    /**
+     * Remove a top-level menu from the list.
+     *
+     * @param menu the menu to remove
+     * @throws IllegalArgumentException if the menu is already used in
+     * another TApplication
+     */
+    public final void removeMenu(final TMenu menu) {
+        if ((menu.getApplication() != null)
+            && (menu.getApplication() != this)
+        ) {
+            throw new IllegalArgumentException("Menu " + menu + " is already " +
+                "part of application " + menu.getApplication());
+        }
+        closeMenu();
+        menus.remove(menu);
+        recomputeMenuX();
     }
 
     /**
@@ -1865,7 +2614,32 @@ public class TApplication implements Runnable {
         int x = 0;
         for (TMenu menu: menus) {
             menu.setX(x);
+            menu.setTitleX(x);
             x += menu.getTitle().length() + 2;
+
+            // Don't let the menu window exceed the screen width
+            int rightEdge = menu.getX() + menu.getWidth();
+            if (rightEdge > getScreen().getWidth()) {
+                menu.setX(getScreen().getWidth() - menu.getWidth());
+            }
+        }
+    }
+
+    /**
+     * Post an event to process.
+     *
+     * @param event new event to add to the queue
+     */
+    public final void postEvent(final TInputEvent event) {
+        synchronized (this) {
+            synchronized (fillEventQueue) {
+                fillEventQueue.add(event);
+            }
+            if (debugThreads) {
+                System.err.println(System.currentTimeMillis() + " " +
+                    Thread.currentThread() + " postEvent() wake up main");
+            }
+            this.notify();
         }
     }
 
@@ -1875,10 +2649,17 @@ public class TApplication implements Runnable {
      * @param event new event to add to the queue
      */
     public final void postMenuEvent(final TInputEvent event) {
-        synchronized (fillEventQueue) {
-            fillEventQueue.add(event);
+        synchronized (this) {
+            synchronized (fillEventQueue) {
+                fillEventQueue.add(event);
+            }
+            if (debugThreads) {
+                System.err.println(System.currentTimeMillis() + " " +
+                    Thread.currentThread() + " postMenuEvent() wake up main");
+            }
+            closeMenu();
+            this.notify();
         }
-        closeMenu();
     }
 
     /**
@@ -1911,14 +2692,14 @@ public class TApplication implements Runnable {
      * @return the new menu
      */
     public final TMenu addFileMenu() {
-        TMenu fileMenu = addMenu("&File");
+        TMenu fileMenu = addMenu(i18n.getString("fileMenuTitle"));
         fileMenu.addDefaultItem(TMenu.MID_OPEN_FILE);
         fileMenu.addSeparator();
         fileMenu.addDefaultItem(TMenu.MID_SHELL);
         fileMenu.addDefaultItem(TMenu.MID_EXIT);
-        TStatusBar statusBar = fileMenu.newStatusBar("File-management " +
-            "commands (Open, Save, Print, etc.)");
-        statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
+        TStatusBar statusBar = fileMenu.newStatusBar(i18n.
+            getString("fileMenuStatus"));
+        statusBar.addShortcutKeypress(kbF1, cmHelp, i18n.getString("Help"));
         return fileMenu;
     }
 
@@ -1928,14 +2709,14 @@ public class TApplication implements Runnable {
      * @return the new menu
      */
     public final TMenu addEditMenu() {
-        TMenu editMenu = addMenu("&Edit");
+        TMenu editMenu = addMenu(i18n.getString("editMenuTitle"));
         editMenu.addDefaultItem(TMenu.MID_CUT);
         editMenu.addDefaultItem(TMenu.MID_COPY);
         editMenu.addDefaultItem(TMenu.MID_PASTE);
         editMenu.addDefaultItem(TMenu.MID_CLEAR);
-        TStatusBar statusBar = editMenu.newStatusBar("Editor operations, " +
-            "undo, and Clipboard access");
-        statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
+        TStatusBar statusBar = editMenu.newStatusBar(i18n.
+            getString("editMenuStatus"));
+        statusBar.addShortcutKeypress(kbF1, cmHelp, i18n.getString("Help"));
         return editMenu;
     }
 
@@ -1945,7 +2726,7 @@ public class TApplication implements Runnable {
      * @return the new menu
      */
     public final TMenu addWindowMenu() {
-        TMenu windowMenu = addMenu("&Window");
+        TMenu windowMenu = addMenu(i18n.getString("windowMenuTitle"));
         windowMenu.addDefaultItem(TMenu.MID_TILE);
         windowMenu.addDefaultItem(TMenu.MID_CASCADE);
         windowMenu.addDefaultItem(TMenu.MID_CLOSE_ALL);
@@ -1955,9 +2736,9 @@ public class TApplication implements Runnable {
         windowMenu.addDefaultItem(TMenu.MID_WINDOW_NEXT);
         windowMenu.addDefaultItem(TMenu.MID_WINDOW_PREVIOUS);
         windowMenu.addDefaultItem(TMenu.MID_WINDOW_CLOSE);
-        TStatusBar statusBar = windowMenu.newStatusBar("Open, arrange, and " +
-            "list windows");
-        statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
+        TStatusBar statusBar = windowMenu.newStatusBar(i18n.
+            getString("windowMenuStatus"));
+        statusBar.addShortcutKeypress(kbF1, cmHelp, i18n.getString("Help"));
         return windowMenu;
     }
 
@@ -1967,7 +2748,7 @@ public class TApplication implements Runnable {
      * @return the new menu
      */
     public final TMenu addHelpMenu() {
-        TMenu helpMenu = addMenu("&Help");
+        TMenu helpMenu = addMenu(i18n.getString("helpMenuTitle"));
         helpMenu.addDefaultItem(TMenu.MID_HELP_CONTENTS);
         helpMenu.addDefaultItem(TMenu.MID_HELP_INDEX);
         helpMenu.addDefaultItem(TMenu.MID_HELP_SEARCH);
@@ -1976,126 +2757,10 @@ public class TApplication implements Runnable {
         helpMenu.addDefaultItem(TMenu.MID_HELP_ACTIVE_FILE);
         helpMenu.addSeparator();
         helpMenu.addDefaultItem(TMenu.MID_ABOUT);
-        TStatusBar statusBar = helpMenu.newStatusBar("Access online help");
-        statusBar.addShortcutKeypress(kbF1, cmHelp, "Help");
+        TStatusBar statusBar = helpMenu.newStatusBar(i18n.
+            getString("helpMenuStatus"));
+        statusBar.addShortcutKeypress(kbF1, cmHelp, i18n.getString("Help"));
         return helpMenu;
-    }
-
-    // ------------------------------------------------------------------------
-    // Event handlers ---------------------------------------------------------
-    // ------------------------------------------------------------------------
-
-    /**
-     * Method that TApplication subclasses can override to handle menu or
-     * posted command events.
-     *
-     * @param command command event
-     * @return if true, this event was consumed
-     */
-    protected boolean onCommand(final TCommandEvent command) {
-        // Default: handle cmExit
-        if (command.equals(cmExit)) {
-            if (messageBox("Confirmation", "Exit application?",
-                    TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
-                quit = true;
-            }
-            return true;
-        }
-
-        if (command.equals(cmShell)) {
-            openTerminal(0, 0, TWindow.RESIZABLE);
-            return true;
-        }
-
-        if (command.equals(cmTile)) {
-            tileWindows();
-            return true;
-        }
-        if (command.equals(cmCascade)) {
-            cascadeWindows();
-            return true;
-        }
-        if (command.equals(cmCloseAll)) {
-            closeAllWindows();
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Method that TApplication subclasses can override to handle menu
-     * events.
-     *
-     * @param menu menu event
-     * @return if true, this event was consumed
-     */
-    protected boolean onMenu(final TMenuEvent menu) {
-
-        // Default: handle MID_EXIT
-        if (menu.getId() == TMenu.MID_EXIT) {
-            if (messageBox("Confirmation", "Exit application?",
-                    TMessageBox.Type.YESNO).getResult() == TMessageBox.Result.YES) {
-                quit = true;
-            }
-            return true;
-        }
-
-        if (menu.getId() == TMenu.MID_SHELL) {
-            openTerminal(0, 0, TWindow.RESIZABLE);
-            return true;
-        }
-
-        if (menu.getId() == TMenu.MID_TILE) {
-            tileWindows();
-            return true;
-        }
-        if (menu.getId() == TMenu.MID_CASCADE) {
-            cascadeWindows();
-            return true;
-        }
-        if (menu.getId() == TMenu.MID_CLOSE_ALL) {
-            closeAllWindows();
-            return true;
-        }
-        if (menu.getId() == TMenu.MID_ABOUT) {
-            showAboutDialog();
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Method that TApplication subclasses can override to handle keystrokes.
-     *
-     * @param keypress keystroke event
-     * @return if true, this event was consumed
-     */
-    protected boolean onKeypress(final TKeypressEvent keypress) {
-        // Default: only menu shortcuts
-
-        // Process Alt-F, Alt-E, etc. menu shortcut keys
-        if (!keypress.getKey().isFnKey()
-            && keypress.getKey().isAlt()
-            && !keypress.getKey().isCtrl()
-            && (activeMenu == null)
-            && !modalWindowActive()
-        ) {
-
-            assert (subMenus.size() == 0);
-
-            for (TMenu menu: menus) {
-                if (Character.toLowerCase(menu.getMnemonic().getShortcut())
-                    == Character.toLowerCase(keypress.getKey().getChar())
-                ) {
-                    activeMenu = menu;
-                    menu.setActive(true);
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     // ------------------------------------------------------------------------
@@ -2112,17 +2777,21 @@ public class TApplication implements Runnable {
         Date now = new Date();
         long nowTime = now.getTime();
         long sleepTime = timeout;
-        for (TTimer timer: timers) {
-            long nextTickTime = timer.getNextTick().getTime();
-            if (nextTickTime < nowTime) {
-                return 0;
-            }
 
-            long timeDifference = nextTickTime - nowTime;
-            if (timeDifference < sleepTime) {
-                sleepTime = timeDifference;
+        synchronized (timers) {
+            for (TTimer timer: timers) {
+                long nextTickTime = timer.getNextTick().getTime();
+                if (nextTickTime < nowTime) {
+                    return 0;
+                }
+
+                long timeDifference = nextTickTime - nowTime;
+                if (timeDifference < sleepTime) {
+                    sleepTime = timeDifference;
+                }
             }
         }
+
         assert (sleepTime >= 0);
         assert (sleepTime <= timeout);
         return sleepTime;
@@ -2220,6 +2889,22 @@ public class TApplication implements Runnable {
     }
 
     /**
+     * Convenience function to spawn an input box.
+     *
+     * @param title window title, will be centered along the top border
+     * @param caption message to display.  Use embedded newlines to get a
+     * multi-line box.
+     * @param text initial text to seed the field with
+     * @param type one of the Type constants.  Default is Type.OK.
+     * @return the new input box
+     */
+    public final TInputBox inputBox(final String title, final String caption,
+        final String text, final TInputBox.Type type) {
+
+        return new TInputBox(this, title, caption, text, type);
+    }
+
+    /**
      * Convenience function to open a terminal window.
      *
      * @param x column relative to parent
@@ -2242,6 +2927,53 @@ public class TApplication implements Runnable {
         final int flags) {
 
         return new TTerminalWindow(this, x, y, flags);
+    }
+
+    /**
+     * Convenience function to open a terminal window and execute a custom
+     * command line inside it.
+     *
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param commandLine the command line to execute
+     * @return the terminal new window
+     */
+    public final TTerminalWindow openTerminal(final int x, final int y,
+        final String commandLine) {
+
+        return openTerminal(x, y, TWindow.RESIZABLE, commandLine);
+    }
+
+    /**
+     * Convenience function to open a terminal window and execute a custom
+     * command line inside it.
+     *
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param flags mask of CENTERED, MODAL, or RESIZABLE
+     * @param command the command line to execute
+     * @return the terminal new window
+     */
+    public final TTerminalWindow openTerminal(final int x, final int y,
+        final int flags, final String [] command) {
+
+        return new TTerminalWindow(this, x, y, flags, command);
+    }
+
+    /**
+     * Convenience function to open a terminal window and execute a custom
+     * command line inside it.
+     *
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param flags mask of CENTERED, MODAL, or RESIZABLE
+     * @param commandLine the command line to execute
+     * @return the terminal new window
+     */
+    public final TTerminalWindow openTerminal(final int x, final int y,
+        final int flags, final String commandLine) {
+
+        return new TTerminalWindow(this, x, y, flags, commandLine.split("\\s"));
     }
 
     /**
@@ -2270,6 +3002,89 @@ public class TApplication implements Runnable {
 
         TFileOpenBox box = new TFileOpenBox(this, path, type);
         return box.getFilename();
+    }
+
+    /**
+     * Convenience function to create a new window and make it active.
+     * Window will be located at (0, 0).
+     *
+     * @param title window title, will be centered along the top border
+     * @param width width of window
+     * @param height height of window
+     * @return the new window
+     */
+    public final TWindow addWindow(final String title, final int width,
+        final int height) {
+
+        TWindow window = new TWindow(this, title, 0, 0, width, height);
+        return window;
+    }
+
+    /**
+     * Convenience function to create a new window and make it active.
+     * Window will be located at (0, 0).
+     *
+     * @param title window title, will be centered along the top border
+     * @param width width of window
+     * @param height height of window
+     * @param flags bitmask of RESIZABLE, CENTERED, or MODAL
+     * @return the new window
+     */
+    public final TWindow addWindow(final String title,
+        final int width, final int height, final int flags) {
+
+        TWindow window = new TWindow(this, title, 0, 0, width, height, flags);
+        return window;
+    }
+
+    /**
+     * Convenience function to create a new window and make it active.
+     *
+     * @param title window title, will be centered along the top border
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param width width of window
+     * @param height height of window
+     * @return the new window
+     */
+    public final TWindow addWindow(final String title,
+        final int x, final int y, final int width, final int height) {
+
+        TWindow window = new TWindow(this, title, x, y, width, height);
+        return window;
+    }
+
+    /**
+     * Convenience function to create a new window and make it active.
+     *
+     * @param title window title, will be centered along the top border
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param width width of window
+     * @param height height of window
+     * @param flags mask of RESIZABLE, CENTERED, or MODAL
+     * @return the new window
+     */
+    public final TWindow addWindow(final String title,
+        final int x, final int y, final int width, final int height,
+        final int flags) {
+
+        TWindow window = new TWindow(this, title, x, y, width, height, flags);
+        return window;
+    }
+
+    /**
+     * Convenience function to open a file in an editor window and make it
+     * active.
+     *
+     * @param file the file to open
+     * @return the new editor window
+     * @throws IOException if a java.io operation throws
+     */
+    public final TEditorWindow addEditor(final File file) throws IOException {
+
+        TEditorWindow editor = new TEditorWindow(this, file);
+        return editor;
     }
 
 }

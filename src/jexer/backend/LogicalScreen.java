@@ -26,17 +26,20 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
-package jexer.io;
+package jexer.backend;
 
 import jexer.bits.Cell;
 import jexer.bits.CellAttributes;
 import jexer.bits.GraphicsChars;
 
 /**
- * This class represents a text-based screen.  Drawing operations write to a
- * logical screen.
+ * A logical screen composed of a 2D array of Cells.
  */
-public abstract class Screen {
+public class LogicalScreen implements Screen {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Width of the visible window.
@@ -54,27 +57,9 @@ public abstract class Screen {
     private int offsetX;
 
     /**
-     * Set drawing offset for x.
-     *
-     * @param offsetX new drawing offset
-     */
-    public final void setOffsetX(final int offsetX) {
-        this.offsetX = offsetX;
-    }
-
-    /**
      * Drawing offset for y.
      */
     private int offsetY;
-
-    /**
-     * Set drawing offset for y.
-     *
-     * @param offsetY new drawing offset
-     */
-    public final void setOffsetY(final int offsetY) {
-        this.offsetY = offsetY;
-    }
 
     /**
      * Ignore anything drawn right of clipRight.
@@ -82,45 +67,9 @@ public abstract class Screen {
     private int clipRight;
 
     /**
-     * Get right drawing clipping boundary.
-     *
-     * @return drawing boundary
-     */
-    public final int getClipRight() {
-        return clipRight;
-    }
-
-    /**
-     * Set right drawing clipping boundary.
-     *
-     * @param clipRight new boundary
-     */
-    public final void setClipRight(final int clipRight) {
-        this.clipRight = clipRight;
-    }
-
-    /**
      * Ignore anything drawn below clipBottom.
      */
     private int clipBottom;
-
-    /**
-     * Get bottom drawing clipping boundary.
-     *
-     * @return drawing boundary
-     */
-    public final int getClipBottom() {
-        return clipBottom;
-    }
-
-    /**
-     * Set bottom drawing clipping boundary.
-     *
-     * @param clipBottom new boundary
-     */
-    public final void setClipBottom(final int clipBottom) {
-        this.clipBottom = clipBottom;
-    }
 
     /**
      * Ignore anything drawn left of clipLeft.
@@ -128,45 +77,9 @@ public abstract class Screen {
     private int clipLeft;
 
     /**
-     * Get left drawing clipping boundary.
-     *
-     * @return drawing boundary
-     */
-    public final int getClipLeft() {
-        return clipLeft;
-    }
-
-    /**
-     * Set left drawing clipping boundary.
-     *
-     * @param clipLeft new boundary
-     */
-    public final void setClipLeft(final int clipLeft) {
-        this.clipLeft = clipLeft;
-    }
-
-    /**
      * Ignore anything drawn above clipTop.
      */
     private int clipTop;
-
-    /**
-     * Get top drawing clipping boundary.
-     *
-     * @return drawing boundary
-     */
-    public final int getClipTop() {
-        return clipTop;
-    }
-
-    /**
-     * Set top drawing clipping boundary.
-     *
-     * @param clipTop new boundary
-     */
-    public final void setClipTop(final int clipTop) {
-        this.clipTop = clipTop;
-    }
 
     /**
      * The physical screen last sent out on flush().
@@ -177,21 +90,6 @@ public abstract class Screen {
      * The logical screen being rendered to.
      */
     protected Cell [][] logical;
-
-    /**
-     * When true, logical != physical.
-     */
-    protected volatile boolean dirty;
-
-    /**
-     * Get dirty flag.
-     *
-     * @return if true, the logical screen is not in sync with the physical
-     * screen
-     */
-    public final boolean isDirty() {
-        return dirty;
-    }
 
     /**
      * Set if the user explicitly wants to redraw everything starting with a
@@ -215,6 +113,140 @@ public abstract class Screen {
      */
     protected int cursorY;
 
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Public constructor.  Sets everything to not-bold, white-on-black.
+     */
+    protected LogicalScreen() {
+        offsetX  = 0;
+        offsetY  = 0;
+        width    = 80;
+        height   = 24;
+        logical  = null;
+        physical = null;
+        reallocate(width, height);
+    }
+
+    // ------------------------------------------------------------------------
+    // Screen -----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Set drawing offset for x.
+     *
+     * @param offsetX new drawing offset
+     */
+    public final void setOffsetX(final int offsetX) {
+        this.offsetX = offsetX;
+    }
+
+    /**
+     * Set drawing offset for y.
+     *
+     * @param offsetY new drawing offset
+     */
+    public final void setOffsetY(final int offsetY) {
+        this.offsetY = offsetY;
+    }
+
+    /**
+     * Get right drawing clipping boundary.
+     *
+     * @return drawing boundary
+     */
+    public final int getClipRight() {
+        return clipRight;
+    }
+
+    /**
+     * Set right drawing clipping boundary.
+     *
+     * @param clipRight new boundary
+     */
+    public final void setClipRight(final int clipRight) {
+        this.clipRight = clipRight;
+    }
+
+    /**
+     * Get bottom drawing clipping boundary.
+     *
+     * @return drawing boundary
+     */
+    public final int getClipBottom() {
+        return clipBottom;
+    }
+
+    /**
+     * Set bottom drawing clipping boundary.
+     *
+     * @param clipBottom new boundary
+     */
+    public final void setClipBottom(final int clipBottom) {
+        this.clipBottom = clipBottom;
+    }
+
+    /**
+     * Get left drawing clipping boundary.
+     *
+     * @return drawing boundary
+     */
+    public final int getClipLeft() {
+        return clipLeft;
+    }
+
+    /**
+     * Set left drawing clipping boundary.
+     *
+     * @param clipLeft new boundary
+     */
+    public final void setClipLeft(final int clipLeft) {
+        this.clipLeft = clipLeft;
+    }
+
+    /**
+     * Get top drawing clipping boundary.
+     *
+     * @return drawing boundary
+     */
+    public final int getClipTop() {
+        return clipTop;
+    }
+
+    /**
+     * Set top drawing clipping boundary.
+     *
+     * @param clipTop new boundary
+     */
+    public final void setClipTop(final int clipTop) {
+        this.clipTop = clipTop;
+    }
+
+    /**
+     * Get dirty flag.
+     *
+     * @return if true, the logical screen is not in sync with the physical
+     * screen
+     */
+    public final boolean isDirty() {
+        for (int x = 0; x < width; x++) {
+            for (int y = 0; y < height; y++) {
+                if (!logical[x][y].equals(physical[x][y])) {
+                    return true;
+                }
+                if (logical[x][y].isBlink()) {
+                    // Blinking screens are always dirty.  There is
+                    // opportunity for a Netscape blink tag joke here...
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Get the attributes at one location.
      *
@@ -228,6 +260,21 @@ public abstract class Screen {
             attr.setTo(logical[x][y]);
         }
         return attr;
+    }
+
+    /**
+     * Get the cell at one location.
+     *
+     * @param x column coordinate.  0 is the left-most column.
+     * @param y row coordinate.  0 is the top-most row.
+     * @return the character + attributes
+     */
+    public Cell getCharXY(final int x, final int y) {
+        Cell cell = new Cell();
+        if ((x >= 0) && (x < width) && (y >= 0) && (y < height)) {
+            cell.setTo(logical[x][y]);
+        }
+        return cell;
     }
 
     /**
@@ -270,14 +317,17 @@ public abstract class Screen {
         }
 
         if ((X >= 0) && (X < width) && (Y >= 0) && (Y < height)) {
-            dirty = true;
-            logical[X][Y].setForeColor(attr.getForeColor());
-            logical[X][Y].setBackColor(attr.getBackColor());
-            logical[X][Y].setBold(attr.isBold());
-            logical[X][Y].setBlink(attr.isBlink());
-            logical[X][Y].setReverse(attr.isReverse());
-            logical[X][Y].setUnderline(attr.isUnderline());
-            logical[X][Y].setProtect(attr.isProtect());
+            logical[X][Y].setTo(attr);
+
+            // If this happens to be the cursor position, make the position
+            // dirty.
+            if ((cursorX == X) && (cursorY == Y)) {
+                if (physical[cursorX][cursorY].getChar() == 'Q') {
+                    physical[cursorX][cursorY].setChar('X');
+                } else {
+                    physical[cursorX][cursorY].setChar('Q');
+                }
+            }
         }
     }
 
@@ -332,20 +382,23 @@ public abstract class Screen {
         // System.err.printf("putCharXY: %d, %d, %c\n", X, Y, ch);
 
         if ((X >= 0) && (X < width) && (Y >= 0) && (Y < height)) {
-            dirty = true;
 
             // Do not put control characters on the display
             assert (ch >= 0x20);
             assert (ch != 0x7F);
 
+            logical[X][Y].setTo(attr);
             logical[X][Y].setChar(ch);
-            logical[X][Y].setForeColor(attr.getForeColor());
-            logical[X][Y].setBackColor(attr.getBackColor());
-            logical[X][Y].setBold(attr.isBold());
-            logical[X][Y].setBlink(attr.isBlink());
-            logical[X][Y].setReverse(attr.isReverse());
-            logical[X][Y].setUnderline(attr.isUnderline());
-            logical[X][Y].setProtect(attr.isProtect());
+
+            // If this happens to be the cursor position, make the position
+            // dirty.
+            if ((cursorX == X) && (cursorY == Y)) {
+                if (physical[cursorX][cursorY].getChar() == 'Q') {
+                    physical[cursorX][cursorY].setChar('X');
+                } else {
+                    physical[cursorX][cursorY].setChar('Q');
+                }
+            }
         }
     }
 
@@ -372,8 +425,17 @@ public abstract class Screen {
         // System.err.printf("putCharXY: %d, %d, %c\n", X, Y, ch);
 
         if ((X >= 0) && (X < width) && (Y >= 0) && (Y < height)) {
-            dirty = true;
             logical[X][Y].setChar(ch);
+
+            // If this happens to be the cursor position, make the position
+            // dirty.
+            if ((cursorX == X) && (cursorY == Y)) {
+                if (physical[cursorX][cursorY].getChar() == 'Q') {
+                    physical[cursorX][cursorY].setChar('X');
+                } else {
+                    physical[cursorX][cursorY].setChar('Q');
+                }
+            }
         }
     }
 
@@ -455,51 +517,6 @@ public abstract class Screen {
     }
 
     /**
-     * Reallocate screen buffers.
-     *
-     * @param width new width
-     * @param height new height
-     */
-    private synchronized void reallocate(final int width, final int height) {
-        if (logical != null) {
-            for (int row = 0; row < this.height; row++) {
-                for (int col = 0; col < this.width; col++) {
-                    logical[col][row] = null;
-                }
-            }
-            logical = null;
-        }
-        logical = new Cell[width][height];
-        if (physical != null) {
-            for (int row = 0; row < this.height; row++) {
-                for (int col = 0; col < this.width; col++) {
-                    physical[col][row] = null;
-                }
-            }
-            physical = null;
-        }
-        physical = new Cell[width][height];
-
-        for (int row = 0; row < height; row++) {
-            for (int col = 0; col < width; col++) {
-                physical[col][row] = new Cell();
-                logical[col][row] = new Cell();
-            }
-        }
-
-        this.width = width;
-        this.height = height;
-
-        clipLeft = 0;
-        clipTop = 0;
-        clipRight = width;
-        clipBottom = height;
-
-        reallyCleared = true;
-        dirty = true;
-    }
-
-    /**
      * Change the width.  Everything on-screen will be destroyed and must be
      * redrawn.
      *
@@ -549,24 +566,10 @@ public abstract class Screen {
     }
 
     /**
-     * Public constructor.  Sets everything to not-bold, white-on-black.
-     */
-    protected Screen() {
-        offsetX  = 0;
-        offsetY  = 0;
-        width    = 80;
-        height   = 24;
-        logical  = null;
-        physical = null;
-        reallocate(width, height);
-    }
-
-    /**
      * Reset screen to not-bold, white-on-black.  Also flushes the offset and
      * clip variables.
      */
     public final synchronized void reset() {
-        dirty = true;
         for (int row = 0; row < height; row++) {
             for (int col = 0; col < width; col++) {
                 logical[col][row].reset();
@@ -592,18 +595,6 @@ public abstract class Screen {
      */
     public final void clear() {
         reset();
-    }
-
-    /**
-     * Clear the physical screen.
-     */
-    public final void clearPhysical() {
-        dirty = true;
-        for (int row = 0; row < height; row++) {
-            for (int col = 0; col < width; col++) {
-                physical[col][row].reset();
-            }
-        }
     }
 
     /**
@@ -747,10 +738,9 @@ public abstract class Screen {
     }
 
     /**
-     * Subclasses must provide an implementation to push the logical screen
-     * to the physical device.
+     * Default implementation does nothing.
      */
-    public abstract void flushPhysical();
+    public void flushPhysical() {}
 
     /**
      * Put the cursor at (x,y).
@@ -760,6 +750,18 @@ public abstract class Screen {
      * @param y row coordinate to put the cursor on
      */
     public void putCursor(final boolean visible, final int x, final int y) {
+        if ((cursorY >= 0)
+            && (cursorX >= 0)
+            && (cursorY <= height - 1)
+            && (cursorX <= width - 1)
+        ) {
+            // Make the current cursor position dirty
+            if (physical[cursorX][cursorY].getChar() == 'Q') {
+                physical[cursorX][cursorY].setChar('X');
+            } else {
+                physical[cursorX][cursorY].setChar('Q');
+            }
+        }
 
         cursorVisible = visible;
         cursorX = x;
@@ -772,4 +774,98 @@ public abstract class Screen {
     public final void hideCursor() {
         cursorVisible = false;
     }
+
+    /**
+     * Get the cursor visibility.
+     *
+     * @return true if the cursor is visible
+     */
+    public boolean isCursorVisible() {
+        return cursorVisible;
+    }
+
+    /**
+     * Get the cursor X position.
+     *
+     * @return the cursor x column position
+     */
+    public int getCursorX() {
+        return cursorX;
+    }
+
+    /**
+     * Get the cursor Y position.
+     *
+     * @return the cursor y row position
+     */
+    public int getCursorY() {
+        return cursorY;
+    }
+
+    /**
+     * Set the window title.  Default implementation does nothing.
+     *
+     * @param title the new title
+     */
+    public void setTitle(final String title) {}
+
+    // ------------------------------------------------------------------------
+    // LogicalScreen ----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Reallocate screen buffers.
+     *
+     * @param width new width
+     * @param height new height
+     */
+    private synchronized void reallocate(final int width, final int height) {
+        if (logical != null) {
+            for (int row = 0; row < this.height; row++) {
+                for (int col = 0; col < this.width; col++) {
+                    logical[col][row] = null;
+                }
+            }
+            logical = null;
+        }
+        logical = new Cell[width][height];
+        if (physical != null) {
+            for (int row = 0; row < this.height; row++) {
+                for (int col = 0; col < this.width; col++) {
+                    physical[col][row] = null;
+                }
+            }
+            physical = null;
+        }
+        physical = new Cell[width][height];
+
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                physical[col][row] = new Cell();
+                logical[col][row] = new Cell();
+            }
+        }
+
+        this.width = width;
+        this.height = height;
+
+        clipLeft = 0;
+        clipTop = 0;
+        clipRight = width;
+        clipBottom = height;
+
+        reallyCleared = true;
+    }
+
+    /**
+     * Clear the physical screen.
+     */
+    public final void clearPhysical() {
+        for (int row = 0; row < height; row++) {
+            for (int col = 0; col < width; col++) {
+                physical[col][row].reset();
+            }
+        }
+    }
+
 }

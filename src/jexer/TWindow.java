@@ -28,8 +28,31 @@
  */
 package jexer;
 
-import java.util.HashSet;
+import static jexer.TCommand.cmWindowClose;
+import static jexer.TCommand.cmWindowMove;
+import static jexer.TCommand.cmWindowNext;
+import static jexer.TCommand.cmWindowPrevious;
+import static jexer.TCommand.cmWindowZoom;
+import static jexer.TKeypress.kbCtrlF5;
+import static jexer.TKeypress.kbCtrlW;
+import static jexer.TKeypress.kbDown;
+import static jexer.TKeypress.kbEnter;
+import static jexer.TKeypress.kbEsc;
+import static jexer.TKeypress.kbF5;
+import static jexer.TKeypress.kbF6;
+import static jexer.TKeypress.kbLeft;
+import static jexer.TKeypress.kbRight;
+import static jexer.TKeypress.kbShiftDown;
+import static jexer.TKeypress.kbShiftF6;
+import static jexer.TKeypress.kbShiftLeft;
+import static jexer.TKeypress.kbShiftRight;
+import static jexer.TKeypress.kbShiftUp;
+import static jexer.TKeypress.kbUp;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import jexer.backend.Screen;
 import jexer.bits.Cell;
 import jexer.bits.CellAttributes;
 import jexer.bits.GraphicsChars;
@@ -38,10 +61,8 @@ import jexer.event.TKeypressEvent;
 import jexer.event.TMenuEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
-import jexer.io.Screen;
+import jexer.event.TResizeEvent.Type;
 import jexer.menu.TMenu;
-import static jexer.TCommand.*;
-import static jexer.TKeypress.*;
 
 /**
  * TWindow is the top-level container and drawing surface for other widgets.
@@ -49,7 +70,7 @@ import static jexer.TKeypress.*;
 public class TWindow extends TWidget {
 
     // ------------------------------------------------------------------------
-    // Public constants -------------------------------------------------------
+    // Constants --------------------------------------------------------------
     // ------------------------------------------------------------------------
 
     /**
@@ -72,8 +93,31 @@ public class TWindow extends TWidget {
      */
     public static final int UNCLOSABLE  = 0x08;
 
+    /**
+     * Window has no close box (default no).  Window can still be closed via
+     * TApplication.closeWindow() and TWindow.close().
+     */
+    public static final int NOCLOSEBOX  = 0x08;
+
+    /**
+     * Window has no maximize box (default no).
+     */
+    public static final int NOZOOMBOX   = 0x10;
+
+    /**
+     * Window is placed at absolute position (no smart placement) (default
+     * no).
+     */
+    public static final int ABSOLUTEXY  = 0x20;
+
+    /**
+     * Hitting the closebox with the mouse calls TApplication.hideWindow()
+     * rather than TApplication.closeWindow() (default no).
+     */
+    public static final int HIDEONCLOSE = 0x40;
+
     // ------------------------------------------------------------------------
-    // Common window attributes -----------------------------------------------
+    // Variables --------------------------------------------------------------
     // ------------------------------------------------------------------------
 
     /**
@@ -87,51 +131,9 @@ public class TWindow extends TWidget {
     private String title = "";
 
     /**
-     * Get window title.
-     *
-     * @return window title
-     */
-    public final String getTitle() {
-        return title;
-    }
-
-    /**
-     * Set window title.
-     *
-     * @param title new window title
-     */
-    public final void setTitle(final String title) {
-        this.title = title;
-    }
-
-    // ------------------------------------------------------------------------
-    // TApplication integration -----------------------------------------------
-    // ------------------------------------------------------------------------
-
-    /**
      * Window's parent TApplication.
      */
     private TApplication application;
-
-    /**
-     * Get this TWindow's parent TApplication.
-     *
-     * @return this TWindow's parent TApplication
-     */
-    @Override
-    public final TApplication getApplication() {
-        return application;
-    }
-
-    /**
-     * Get the Screen.
-     *
-     * @return the Screen
-     */
-    @Override
-    public final Screen getScreen() {
-        return application.getScreen();
-    }
 
     /**
      * Z order.  Lower number means more in-front.
@@ -139,95 +141,11 @@ public class TWindow extends TWidget {
     private int z = 0;
 
     /**
-     * Get Z order.  Lower number means more in-front.
-     *
-     * @return Z value.  Lower number means more in-front.
-     */
-    public final int getZ() {
-        return z;
-    }
-
-    /**
-     * Set Z order.  Lower number means more in-front.
-     *
-     * @param z the new Z value.  Lower number means more in-front.
-     */
-    public final void setZ(final int z) {
-        this.z = z;
-    }
-
-    /**
      * Window's keyboard shortcuts.  Any key in this set will be passed to
      * the window directly rather than processed through the menu
      * accelerators.
      */
-    private HashSet<TKeypress> keyboardShortcuts = new HashSet<TKeypress>();
-
-    /**
-     * Add a keypress to be overridden for this window.
-     *
-     * @param key the key to start taking control of
-     */
-    protected void addShortcutKeypress(final TKeypress key) {
-        keyboardShortcuts.add(key);
-    }
-
-    /**
-     * Remove a keypress to be overridden for this window.
-     *
-     * @param key the key to stop taking control of
-     */
-    protected void removeShortcutKeypress(final TKeypress key) {
-        keyboardShortcuts.remove(key);
-    }
-
-    /**
-     * Remove all keypresses to be overridden for this window.
-     */
-    protected void clearShortcutKeypresses() {
-        keyboardShortcuts.clear();
-    }
-
-    /**
-     * Determine if a keypress is overridden for this window.
-     *
-     * @param key the key to check
-     * @return true if this window wants to process this key on its own
-     */
-    public boolean isShortcutKeypress(final TKeypress key) {
-        return keyboardShortcuts.contains(key);
-    }
-
-    /**
-     * A window may have a status bar associated with it.  TApplication will
-     * draw this status bar last, and will also route events to it first
-     * before the window.
-     */
-    protected TStatusBar statusBar = null;
-
-    /**
-     * Get the window's status bar, or null if it does not have one.
-     *
-     * @return the status bar, or null
-     */
-    public TStatusBar getStatusBar() {
-        return statusBar;
-    }
-
-    /**
-     * Set the window's status bar to a new one.
-     *
-     * @param text the status bar text
-     * @return the status bar
-     */
-    public TStatusBar newStatusBar(final String text) {
-        statusBar = new TStatusBar(this, text);
-        return statusBar;
-    }
-
-    // ------------------------------------------------------------------------
-    // Window movement/resizing support ---------------------------------------
-    // ------------------------------------------------------------------------
+    private Set<TKeypress> keyboardShortcuts = new HashSet<TKeypress>();
 
     /**
      * If true, then the user clicked on the title bar and is moving the
@@ -245,7 +163,7 @@ public class TWindow extends TWidget {
      * If true, then the user selected "Size/Move" (or hit Ctrl-F5) and is
      * resizing/moving the window via the keyboard.
      */
-    private boolean inKeyboardResize = false;
+    protected boolean inKeyboardResize = false;
 
     /**
      * If true, this window is maximized.
@@ -278,65 +196,19 @@ public class TWindow extends TWidget {
     private int restoreWindowY;
 
     /**
-     * Set the maximum width for this window.
-     *
-     * @param maximumWindowWidth new maximum width
+     * Hidden flag.  A hidden window will still have its onIdle() called, and
+     * will also have onClose() called at application exit.  Note package
+     * private access: TApplication will force hidden false if a modal window
+     * is active.
      */
-    public final void setMaximumWindowWidth(final int maximumWindowWidth) {
-        this.maximumWindowWidth = maximumWindowWidth;
-    }
+    boolean hidden = false;
 
     /**
-     * Recenter the window on-screen.
+     * A window may have a status bar associated with it.  TApplication will
+     * draw this status bar last, and will also route events to it first
+     * before the window.
      */
-    public final void center() {
-        if ((flags & CENTERED) != 0) {
-            if (getWidth() < getScreen().getWidth()) {
-                setX((getScreen().getWidth() - getWidth()) / 2);
-            } else {
-                setX(0);
-            }
-            setY(((application.getDesktopBottom()
-                    - application.getDesktopTop()) - getHeight()) / 2);
-            if (getY() < 0) {
-                setY(0);
-            }
-            setY(getY() + application.getDesktopTop());
-        }
-    }
-
-    /**
-     * Maximize window to the current maximum size.
-     */
-    public void maximize() {
-    	if (!maximized) {
-	        restoreWindowWidth = getWidth();
-	        restoreWindowHeight = getHeight();
-	        restoreWindowX = getX();
-	        restoreWindowY = getY();
-    	}
-    	
-        setWidth(getScreen().getWidth());
-        setHeight(application.getDesktopBottom() - 1);
-        setX(0);
-        setY(1);
-        
-        maximized = true;
-    }
-
-    /**
-     * Restore (unmaximize) window.
-     */
-    public void restore() {
-    	if (maximized) {
-	        setWidth(restoreWindowWidth);
-	        setHeight(restoreWindowHeight);
-	        setX(restoreWindowX);
-	        setY(restoreWindowY);
-    	}
-    	
-        maximized = false;
-    }
+    protected TStatusBar statusBar = null;
 
     // ------------------------------------------------------------------------
     // Constructors -----------------------------------------------------------
@@ -426,183 +298,7 @@ public class TWindow extends TWidget {
         center();
 
         // Add me to the application
-        application.addWindow(this);
-    }
-
-    // ------------------------------------------------------------------------
-    // General behavior -------------------------------------------------------
-    // ------------------------------------------------------------------------
-
-    /**
-     * Returns true if this window is modal.
-     *
-     * @return true if this window is modal
-     */
-    public final boolean isModal() {
-        if ((flags & MODAL) == 0) {
-            return false;
-        }
-        return true;
-    }
-    
-    /**
-     * This window cannot be closed.
-     * @return TRUE if it cannot be closed
-     */
-    public boolean isUnclosable() {
-    	return (flags & UNCLOSABLE) != 0;
-    }
-
-    /**
-     * Retrieve the background color.
-     *
-     * @return the background color
-     */
-    public final CellAttributes getBackground() {
-        if (!isModal()
-            && (inWindowMove || inWindowResize || inKeyboardResize)
-        ) {
-            assert (isActive());
-            return getTheme().getColor("twindow.background.windowmove");
-        } else if (isModal() && inWindowMove) {
-            assert (isActive());
-            return getTheme().getColor("twindow.background.modal");
-        } else if (isModal()) {
-            if (isActive()) {
-                return getTheme().getColor("twindow.background.modal");
-            }
-            return getTheme().getColor("twindow.background.modal.inactive");
-        } else if (isActive()) {
-            assert (!isModal());
-            return getTheme().getColor("twindow.background");
-        } else {
-            assert (!isModal());
-            return getTheme().getColor("twindow.background.inactive");
-        }
-    }
-
-    /**
-     * Retrieve the border color.
-     *
-     * @return the border color
-     */
-    public CellAttributes getBorder() {
-        if (!isModal()
-            && (inWindowMove || inWindowResize || inKeyboardResize)
-        ) {
-            assert (isActive());
-            return getTheme().getColor("twindow.border.windowmove");
-        } else if (isModal() && inWindowMove) {
-            assert (isActive());
-            return getTheme().getColor("twindow.border.modal.windowmove");
-        } else if (isModal()) {
-            if (isActive()) {
-                return getTheme().getColor("twindow.border.modal");
-            } else {
-                return getTheme().getColor("twindow.border.modal.inactive");
-            }
-        } else if (isActive()) {
-            assert (!isModal());
-            return getTheme().getColor("twindow.border");
-        } else {
-            assert (!isModal());
-            return getTheme().getColor("twindow.border.inactive");
-        }
-    }
-
-    /**
-     * Retrieve the border line type.
-     *
-     * @return the border line type
-     */
-    private int getBorderType() {
-        if (!isModal()
-            && (inWindowMove || inWindowResize || inKeyboardResize)
-        ) {
-            assert (isActive());
-            return 1;
-        } else if (isModal() && inWindowMove) {
-            assert (isActive());
-            return 1;
-        } else if (isModal()) {
-            if (isActive()) {
-                return 2;
-            } else {
-                return 1;
-            }
-        } else if (isActive()) {
-            return 2;
-        } else {
-            return 1;
-        }
-    }
-
-    /**
-     * Called by TApplication.drawChildren() to render on screen.
-     */
-    @Override
-    public void draw() {
-        // Draw the box and background first.
-        CellAttributes border = getBorder();
-        CellAttributes background = getBackground();
-        int borderType = getBorderType();
-
-        getScreen().drawBox(0, 0, getWidth(), getHeight(), border,
-            background, borderType, true);
-
-        // Draw the title
-        int titleLeft = (getWidth() - title.length() - 2) / 2;
-        putCharXY(titleLeft, 0, ' ', border);
-        putStringXY(titleLeft + 1, 0, title);
-        putCharXY(titleLeft + title.length() + 1, 0, ' ', border);
-
-        if (isActive()) {
-        	if (!isUnclosable()) {
-	            // Draw the close button
-	            putCharXY(2, 0, '[', border);
-	            putCharXY(4, 0, ']', border);
-	            if (mouseOnClose() && mouse.isMouse1()) {
-	                putCharXY(3, 0, GraphicsChars.CP437[0x0F],
-	                    !isModal()
-	                    ? getTheme().getColor("twindow.border.windowmove")
-	                    : getTheme().getColor("twindow.border.modal.windowmove"));
-	            } else {
-	                putCharXY(3, 0, GraphicsChars.CP437[0xFE],
-	                    !isModal()
-	                    ? getTheme().getColor("twindow.border.windowmove")
-	                    : getTheme().getColor("twindow.border.modal.windowmove"));
-	            }
-        	}
-        	
-            // Draw the maximize button
-            if (!isModal()) {
-
-                putCharXY(getWidth() - 5, 0, '[', border);
-                putCharXY(getWidth() - 3, 0, ']', border);
-                if (mouseOnMaximize() && mouse.isMouse1()) {
-                    putCharXY(getWidth() - 4, 0, GraphicsChars.CP437[0x0F],
-                        getTheme().getColor("twindow.border.windowmove"));
-                } else {
-                    if (maximized) {
-                        putCharXY(getWidth() - 4, 0, GraphicsChars.CP437[0x12],
-                            getTheme().getColor("twindow.border.windowmove"));
-                    } else {
-                        putCharXY(getWidth() - 4, 0, GraphicsChars.UPARROW,
-                            getTheme().getColor("twindow.border.windowmove"));
-                    }
-                }
-
-                // Draw the resize corner
-                if ((flags & RESIZABLE) != 0) {
-                    putCharXY(getWidth() - 2, getHeight() - 1,
-                        GraphicsChars.SINGLE_BAR,
-                        getTheme().getColor("twindow.border.windowmove"));
-                    putCharXY(getWidth() - 1, getHeight() - 1,
-                        GraphicsChars.LRCORNER,
-                        getTheme().getColor("twindow.border.windowmove"));
-                }
-            }
-        }
+        application.addWindowToApplication(this);
     }
 
     // ------------------------------------------------------------------------
@@ -614,17 +310,28 @@ public class TWindow extends TWidget {
      *
      * @return true if mouse is currently on the close button
      */
-    private boolean mouseOnClose() {
-    	if (((flags & UNCLOSABLE) == 0)) {
-	        if ((mouse != null)
-	            && (mouse.getAbsoluteY() == getY())
-	            && (mouse.getAbsoluteX() == getX() + 3)
-	        ) {
-	            return true;
-	        }
-    	}
-    	
+    protected boolean mouseOnClose() {
+        if ((flags & NOCLOSEBOX) != 0) {
+            return false;
+        }
+        if ((flags & UNCLOSABLE) != 0) {
+            return false;
+        }
+        if ((mouse != null)
+            && (mouse.getAbsoluteY() == getY())
+            && (mouse.getAbsoluteX() == getX() + 3)
+        ) {
+            return true;
+        }
         return false;
+    }
+    
+    /**
+     * This window cannot be closed.
+     * @return TRUE if it cannot be closed
+     */
+    public boolean isUnclosable() {
+    	return (flags & UNCLOSABLE) != 0;
     }
 
     /**
@@ -632,7 +339,10 @@ public class TWindow extends TWidget {
      *
      * @return true if the mouse is currently on the maximize/restore button
      */
-    private boolean mouseOnMaximize() {
+    protected boolean mouseOnMaximize() {
+        if ((flags & NOZOOMBOX) != 0) {
+            return false;
+        }
         if ((mouse != null)
             && !isModal()
             && (mouse.getAbsoluteY() == getY())
@@ -650,7 +360,7 @@ public class TWindow extends TWidget {
      * @return true if the mouse is currently on the resizable lower right
      * corner
      */
-    private boolean mouseOnResize() {
+    protected boolean mouseOnResize() {
         if (((flags & RESIZABLE) != 0)
             && !isModal()
             && (mouse != null)
@@ -684,6 +394,20 @@ public class TWindow extends TWidget {
      * focus.
      */
     public void onUnfocus() {
+        // Default: do nothing
+    }
+
+    /**
+     * Called by application.hideWindow().
+     */
+    public void onHide() {
+        // Default: do nothing
+    }
+
+    /**
+     * Called by application.showWindow().
+     */
+    public void onShow() {
         // Default: do nothing
     }
 
@@ -762,8 +486,13 @@ public class TWindow extends TWidget {
         }
 
         if (mouse.isMouse1() && mouseOnClose()) {
-            // Close window
-            application.closeWindow(this);
+            if ((flags & HIDEONCLOSE) == 0) {
+                // Close window
+                application.closeWindow(this);
+            } else {
+                // Hide window
+                application.hideWindow(this);
+            }
             return;
         }
 
@@ -819,6 +548,12 @@ public class TWindow extends TWidget {
         }
 
         if (inWindowResize) {
+            // Do not permit resizing below the status line
+            if (mouse.getAbsoluteY() == application.getDesktopBottom()) {
+                inWindowResize = false;
+                return;
+            }
+
             // Move window over
             setWidth(resizeWindowWidth + (mouse.getAbsoluteX()
                     - moveWindowMouseX));
@@ -907,38 +642,46 @@ public class TWindow extends TWidget {
                     setY(getY() - 1);
                 }
             }
-            if (keypress.equals(kbShiftLeft)) {
-                if ((getWidth() > minimumWindowWidth)
-                    || (minimumWindowWidth <= 0)
-                ) {
-                    setWidth(getWidth() - 1);
-                }
-            }
-            if (keypress.equals(kbShiftRight)) {
-                if ((getWidth() < maximumWindowWidth)
-                    || (maximumWindowWidth <= 0)
-                ) {
-                    setWidth(getWidth() + 1);
-                }
-            }
-            if (keypress.equals(kbShiftUp)) {
-                if ((getHeight() > minimumWindowHeight)
-                    || (minimumWindowHeight <= 0)
-                ) {
-                    setHeight(getHeight() - 1);
-                }
-            }
-            if (keypress.equals(kbShiftDown)) {
-                if ((getHeight() < maximumWindowHeight)
-                    || (maximumWindowHeight <= 0)
-                ) {
-                    setHeight(getHeight() + 1);
-                }
-            }
 
-            // Pass a resize event to my children
-            onResize(new TResizeEvent(TResizeEvent.Type.WIDGET,
-                    getWidth(), getHeight()));
+            /*
+             * Only permit keyboard resizing if the window was RESIZABLE.
+             */
+            if ((flags & RESIZABLE) != 0) {
+
+                if (keypress.equals(kbShiftLeft)) {
+                    if ((getWidth() > minimumWindowWidth)
+                        || (minimumWindowWidth <= 0)
+                    ) {
+                        setWidth(getWidth() - 1);
+                    }
+                }
+                if (keypress.equals(kbShiftRight)) {
+                    if ((getWidth() < maximumWindowWidth)
+                        || (maximumWindowWidth <= 0)
+                    ) {
+                        setWidth(getWidth() + 1);
+                    }
+                }
+                if (keypress.equals(kbShiftUp)) {
+                    if ((getHeight() > minimumWindowHeight)
+                        || (minimumWindowHeight <= 0)
+                    ) {
+                        setHeight(getHeight() - 1);
+                    }
+                }
+                if (keypress.equals(kbShiftDown)) {
+                    if ((getHeight() < maximumWindowHeight)
+                        || (maximumWindowHeight <= 0)
+                    ) {
+                        setHeight(getHeight() + 1);
+                    }
+                }
+
+                // Pass a resize event to my children
+                onResize(new TResizeEvent(TResizeEvent.Type.WIDGET,
+                        getWidth(), getHeight()));
+
+            } // if ((flags & RESIZABLE) != 0)
 
             return;
         }
@@ -954,37 +697,49 @@ public class TWindow extends TWidget {
         // overrides onMenu() due to how TApplication dispatches
         // accelerators.
 
-        // Ctrl-W - close window
-        if (keypress.equals(kbCtrlW)) {
-            application.closeWindow(this);
-            return;
-        }
+        if (!(this instanceof TDesktop)) {
 
-        // F6 - behave like Alt-TAB
-        if (keypress.equals(kbF6)) {
-            application.switchWindow(true);
-            return;
-        }
-
-        // Shift-F6 - behave like Shift-Alt-TAB
-        if (keypress.equals(kbShiftF6)) {
-            application.switchWindow(false);
-            return;
-        }
-
-        // F5 - zoom
-        if (keypress.equals(kbF5)) {
-            if (maximized) {
-                restore();
-            } else {
-                maximize();
+            // Ctrl-W - close window
+            if (keypress.equals(kbCtrlW)) {
+                if ((flags & NOCLOSEBOX) == 0) {
+                    if ((flags & HIDEONCLOSE) == 0) {
+                        // Close window
+                        application.closeWindow(this);
+                    } else {
+                        // Hide window
+                        application.hideWindow(this);
+                    }
+                }
+                return;
             }
-        }
 
-        // Ctrl-F5 - size/move
-        if (keypress.equals(kbCtrlF5)) {
-            inKeyboardResize = !inKeyboardResize;
-        }
+            // F6 - behave like Alt-TAB
+            if (keypress.equals(kbF6)) {
+                application.switchWindow(true);
+                return;
+            }
+
+            // Shift-F6 - behave like Shift-Alt-TAB
+            if (keypress.equals(kbShiftF6)) {
+                application.switchWindow(false);
+                return;
+            }
+
+            // F5 - zoom
+            if (keypress.equals(kbF5) && ((flags & NOZOOMBOX) == 0)) {
+                if (maximized) {
+                    restore();
+                } else {
+                    maximize();
+                }
+            }
+
+            // Ctrl-F5 - size/move
+            if (keypress.equals(kbCtrlF5)) {
+                inKeyboardResize = !inKeyboardResize;
+            }
+
+        } // if (!(this instanceof TDesktop))
 
         // I didn't take it, pass it on to my children
         super.onKeypress(keypress);
@@ -1002,33 +757,45 @@ public class TWindow extends TWidget {
         // overrides onMenu() due to how TApplication dispatches
         // accelerators.
 
-        if (command.equals(cmWindowClose)) {
-            application.closeWindow(this);
-            return;
-        }
+        if (!(this instanceof TDesktop)) {
 
-        if (command.equals(cmWindowNext)) {
-            application.switchWindow(true);
-            return;
-        }
-
-        if (command.equals(cmWindowPrevious)) {
-            application.switchWindow(false);
-            return;
-        }
-
-        if (command.equals(cmWindowMove)) {
-            inKeyboardResize = true;
-            return;
-        }
-
-        if (command.equals(cmWindowZoom)) {
-            if (maximized) {
-                restore();
-            } else {
-                maximize();
+            if (command.equals(cmWindowClose)) {
+                if ((flags & NOCLOSEBOX) == 0) {
+                    if ((flags & HIDEONCLOSE) == 0) {
+                        // Close window
+                        application.closeWindow(this);
+                    } else {
+                        // Hide window
+                        application.hideWindow(this);
+                    }
+                }
+                return;
             }
-        }
+
+            if (command.equals(cmWindowNext)) {
+                application.switchWindow(true);
+                return;
+            }
+
+            if (command.equals(cmWindowPrevious)) {
+                application.switchWindow(false);
+                return;
+            }
+
+            if (command.equals(cmWindowMove)) {
+                inKeyboardResize = true;
+                return;
+            }
+
+            if (command.equals(cmWindowZoom) && ((flags & NOZOOMBOX) == 0)) {
+                if (maximized) {
+                    restore();
+                } else {
+                    maximize();
+                }
+            }
+
+        } // if (!(this instanceof TDesktop))
 
         // I didn't take it, pass it on to my children
         super.onCommand(command);
@@ -1041,37 +808,553 @@ public class TWindow extends TWidget {
      */
     @Override
     public void onMenu(final TMenuEvent menu) {
-        if (menu.getId() == TMenu.MID_WINDOW_CLOSE) {
-            application.closeWindow(this);
-            return;
-        }
 
-        if (menu.getId() == TMenu.MID_WINDOW_NEXT) {
-            application.switchWindow(true);
-            return;
-        }
+        if (!(this instanceof TDesktop)) {
 
-        if (menu.getId() == TMenu.MID_WINDOW_PREVIOUS) {
-            application.switchWindow(false);
-            return;
-        }
-
-        if (menu.getId() == TMenu.MID_WINDOW_MOVE) {
-            inKeyboardResize = true;
-            return;
-        }
-
-        if (menu.getId() == TMenu.MID_WINDOW_ZOOM) {
-            if (maximized) {
-                restore();
-            } else {
-                maximize();
+            if (menu.getId() == TMenu.MID_WINDOW_CLOSE) {
+                if ((flags & NOCLOSEBOX) == 0) {
+                    if ((flags & HIDEONCLOSE) == 0) {
+                        // Close window
+                        application.closeWindow(this);
+                    } else {
+                        // Hide window
+                        application.hideWindow(this);
+                    }
+                }
+                return;
             }
-            return;
-        }
+
+            if (menu.getId() == TMenu.MID_WINDOW_NEXT) {
+                application.switchWindow(true);
+                return;
+            }
+
+            if (menu.getId() == TMenu.MID_WINDOW_PREVIOUS) {
+                application.switchWindow(false);
+                return;
+            }
+
+            if (menu.getId() == TMenu.MID_WINDOW_MOVE) {
+                inKeyboardResize = true;
+                return;
+            }
+
+            if ((menu.getId() == TMenu.MID_WINDOW_ZOOM)
+                && ((flags & NOZOOMBOX) == 0)
+            ) {
+                if (maximized) {
+                    restore();
+                } else {
+                    maximize();
+                }
+                return;
+            }
+
+        } // if (!(this instanceof TDesktop))
 
         // I didn't take it, pass it on to my children
         super.onMenu(menu);
+    }
+
+    // ------------------------------------------------------------------------
+    // TWidget ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get this TWindow's parent TApplication.
+     *
+     * @return this TWindow's parent TApplication
+     */
+    @Override
+    public final TApplication getApplication() {
+        return application;
+    }
+
+    /**
+     * Get the Screen.
+     *
+     * @return the Screen
+     */
+    @Override
+    public final Screen getScreen() {
+        return application.getScreen();
+    }
+
+    /**
+     * Called by TApplication.drawChildren() to render on screen.
+     */
+    @Override
+    public void draw() {
+        // Draw the box and background first.
+        CellAttributes border = getBorder();
+        CellAttributes background = getBackground();
+        int borderType = getBorderType();
+
+        getScreen().drawBox(0, 0, getWidth(), getHeight(), border,
+            background, borderType, true);
+
+        // Draw the title
+        int titleLeft = (getWidth() - title.length() - 2) / 2;
+        putCharXY(titleLeft, 0, ' ', border);
+        putStringXY(titleLeft + 1, 0, title);
+        putCharXY(titleLeft + title.length() + 1, 0, ' ', border);
+
+        if (isActive()) {
+
+            // Draw the close button
+            if ((flags & NOCLOSEBOX) == 0) {
+                putCharXY(2, 0, '[', border);
+                putCharXY(4, 0, ']', border);
+                if (mouseOnClose() && mouse.isMouse1()) {
+                    putCharXY(3, 0, GraphicsChars.CP437[0x0F],
+                        getBorderControls());
+                } else {
+                    putCharXY(3, 0, GraphicsChars.CP437[0xFE],
+                        getBorderControls());
+                }
+            }
+
+            // Draw the maximize button
+            if (!isModal() && ((flags & NOZOOMBOX) == 0)) {
+
+                putCharXY(getWidth() - 5, 0, '[', border);
+                putCharXY(getWidth() - 3, 0, ']', border);
+                if (mouseOnMaximize() && mouse.isMouse1()) {
+                    putCharXY(getWidth() - 4, 0, GraphicsChars.CP437[0x0F],
+                        getBorderControls());
+                } else {
+                    if (maximized) {
+                        putCharXY(getWidth() - 4, 0, GraphicsChars.CP437[0x12],
+                            getBorderControls());
+                    } else {
+                        putCharXY(getWidth() - 4, 0, GraphicsChars.UPARROW,
+                            getBorderControls());
+                    }
+                }
+
+                // Draw the resize corner
+                if ((flags & RESIZABLE) != 0) {
+                    putCharXY(getWidth() - 2, getHeight() - 1,
+                        GraphicsChars.SINGLE_BAR, getBorderControls());
+                    putCharXY(getWidth() - 1, getHeight() - 1,
+                        GraphicsChars.LRCORNER, getBorderControls());
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // TWindow ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get window title.
+     *
+     * @return window title
+     */
+    public final String getTitle() {
+        return title;
+    }
+
+    /**
+     * Set window title.
+     *
+     * @param title new window title
+     */
+    public final void setTitle(final String title) {
+        this.title = title;
+    }
+
+    /**
+     * Get Z order.  Lower number means more in-front.
+     *
+     * @return Z value.  Lower number means more in-front.
+     */
+    public final int getZ() {
+        return z;
+    }
+
+    /**
+     * Set Z order.  Lower number means more in-front.
+     *
+     * @param z the new Z value.  Lower number means more in-front.
+     */
+    public final void setZ(final int z) {
+        this.z = z;
+    }
+
+    /**
+     * Add a keypress to be overridden for this window.
+     *
+     * @param key the key to start taking control of
+     */
+    protected void addShortcutKeypress(final TKeypress key) {
+        keyboardShortcuts.add(key);
+    }
+
+    /**
+     * Remove a keypress to be overridden for this window.
+     *
+     * @param key the key to stop taking control of
+     */
+    protected void removeShortcutKeypress(final TKeypress key) {
+        keyboardShortcuts.remove(key);
+    }
+
+    /**
+     * Remove all keypresses to be overridden for this window.
+     */
+    protected void clearShortcutKeypresses() {
+        keyboardShortcuts.clear();
+    }
+
+    /**
+     * Determine if a keypress is overridden for this window.
+     *
+     * @param key the key to check
+     * @return true if this window wants to process this key on its own
+     */
+    public boolean isShortcutKeypress(final TKeypress key) {
+        return keyboardShortcuts.contains(key);
+    }
+
+    /**
+     * Get the window's status bar, or null if it does not have one.
+     *
+     * @return the status bar, or null
+     */
+    public TStatusBar getStatusBar() {
+        return statusBar;
+    }
+
+    /**
+     * Set the window's status bar to a new one.
+     *
+     * @param text the status bar text
+     * @return the status bar
+     */
+    public TStatusBar newStatusBar(final String text) {
+        statusBar = new TStatusBar(this, text);
+        return statusBar;
+    }
+
+    /**
+     * Set the maximum width for this window.
+     *
+     * @param maximumWindowWidth new maximum width
+     */
+    public final void setMaximumWindowWidth(final int maximumWindowWidth) {
+        if ((maximumWindowWidth != -1)
+            && (maximumWindowWidth < minimumWindowWidth + 1)
+        ) {
+            throw new IllegalArgumentException("Maximum window width cannot " +
+                "be smaller than minimum window width + 1");
+        }
+        this.maximumWindowWidth = maximumWindowWidth;
+    }
+
+    /**
+     * Set the minimum width for this window.
+     *
+     * @param minimumWindowWidth new minimum width
+     */
+    public final void setMinimumWindowWidth(final int minimumWindowWidth) {
+        if ((maximumWindowWidth != -1)
+            && (minimumWindowWidth > maximumWindowWidth - 1)
+        ) {
+            throw new IllegalArgumentException("Minimum window width cannot " +
+                "be larger than maximum window width - 1");
+        }
+        this.minimumWindowWidth = minimumWindowWidth;
+    }
+
+    /**
+     * Set the maximum height for this window.
+     *
+     * @param maximumWindowHeight new maximum height
+     */
+    public final void setMaximumWindowHeight(final int maximumWindowHeight) {
+        if ((maximumWindowHeight != -1)
+            && (maximumWindowHeight < minimumWindowHeight + 1)
+        ) {
+            throw new IllegalArgumentException("Maximum window height cannot " +
+                "be smaller than minimum window height + 1");
+        }
+        this.maximumWindowHeight = maximumWindowHeight;
+    }
+
+    /**
+     * Set the minimum height for this window.
+     *
+     * @param minimumWindowHeight new minimum height
+     */
+    public final void setMinimumWindowHeight(final int minimumWindowHeight) {
+        if ((maximumWindowHeight != -1)
+            && (minimumWindowHeight > maximumWindowHeight - 1)
+        ) {
+            throw new IllegalArgumentException("Minimum window height cannot " +
+                "be larger than maximum window height - 1");
+        }
+        this.minimumWindowHeight = minimumWindowHeight;
+    }
+
+    /**
+     * Recenter the window on-screen.
+     */
+    public final void center() {
+        if ((flags & CENTERED) != 0) {
+            if (getWidth() < getScreen().getWidth()) {
+                setX((getScreen().getWidth() - getWidth()) / 2);
+            } else {
+                setX(0);
+            }
+            setY(((application.getDesktopBottom()
+                    - application.getDesktopTop()) - getHeight()) / 2);
+            if (getY() < 0) {
+                setY(0);
+            }
+            setY(getY() + application.getDesktopTop());
+        }
+    }
+
+    /**
+     * Maximize window.
+     */
+    public void maximize() {
+        if (maximized) {
+            return;
+        }
+
+        restoreWindowWidth = getWidth();
+        restoreWindowHeight = getHeight();
+        restoreWindowX = getX();
+        restoreWindowY = getY();
+        setWidth(getScreen().getWidth());
+        setHeight(application.getDesktopBottom() - 1);
+        setX(0);
+        setY(1);
+        maximized = true;
+        onResize(new TResizeEvent(TResizeEvent.Type.WIDGET, getWidth(),
+                getHeight()));
+    }
+
+    /**
+     * Restore (unmaximize) window.
+     */
+    public void restore() {
+        if (!maximized) {
+            return;
+        }
+
+        setWidth(restoreWindowWidth);
+        setHeight(restoreWindowHeight);
+        setX(restoreWindowX);
+        setY(restoreWindowY);
+        maximized = false;
+        onResize(new TResizeEvent(TResizeEvent.Type.WIDGET, getWidth(),
+                getHeight()));
+    }
+
+    /**
+     * Returns true if this window is hidden.
+     *
+     * @return true if this window is hidden, false if the window is shown
+     */
+    public final boolean isHidden() {
+        return hidden;
+    }
+
+    /**
+     * Returns true if this window is shown.
+     *
+     * @return true if this window is shown, false if the window is hidden
+     */
+    public final boolean isShown() {
+        return !hidden;
+    }
+
+    /**
+     * Hide window.  A hidden window will still have its onIdle() called, and
+     * will also have onClose() called at application exit.  Hidden windows
+     * will not receive any other events.
+     */
+    public void hide() {
+        application.hideWindow(this);
+    }
+
+    /**
+     * Show window.
+     */
+    public void show() {
+        application.showWindow(this);
+    }
+
+    /**
+     * Activate window (bring to top and receive events).
+     */
+    public void activate() {
+        application.activateWindow(this);
+    }
+
+    /**
+     * Close window.  Note that windows without a close box can still be
+     * closed by calling the close() method.
+     */
+    public void close() {
+        application.closeWindow(this);
+    }
+
+    /**
+     * See if this window is undergoing any movement/resize/etc.
+     *
+     * @return true if the window is moving
+     */
+    public boolean inMovements() {
+        if (inWindowResize || inWindowMove || inKeyboardResize) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Stop any pending movement/resize/etc.
+     */
+    public void stopMovements() {
+        inWindowResize = false;
+        inWindowMove = false;
+        inKeyboardResize = false;
+    }
+
+    /**
+     * Returns true if this window is modal.
+     *
+     * @return true if this window is modal
+     */
+    public final boolean isModal() {
+        if ((flags & MODAL) == 0) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Returns true if this window has a close box.
+     *
+     * @return true if this window has a close box
+     */
+    public final boolean hasCloseBox() {
+        if ((flags & NOCLOSEBOX) != 0) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if this window has a maximize/zoom box.
+     *
+     * @return true if this window has a maximize/zoom box
+     */
+    public final boolean hasZoomBox() {
+        if ((flags & NOZOOMBOX) != 0) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Retrieve the background color.
+     *
+     * @return the background color
+     */
+    public CellAttributes getBackground() {
+        if (!isModal()
+            && (inWindowMove || inWindowResize || inKeyboardResize)
+        ) {
+            assert (isActive());
+            return getTheme().getColor("twindow.background.windowmove");
+        } else if (isModal() && inWindowMove) {
+            assert (isActive());
+            return getTheme().getColor("twindow.background.modal");
+        } else if (isModal()) {
+            if (isActive()) {
+                return getTheme().getColor("twindow.background.modal");
+            }
+            return getTheme().getColor("twindow.background.modal.inactive");
+        } else if (isActive()) {
+            assert (!isModal());
+            return getTheme().getColor("twindow.background");
+        } else {
+            assert (!isModal());
+            return getTheme().getColor("twindow.background.inactive");
+        }
+    }
+
+    /**
+     * Retrieve the border color.
+     *
+     * @return the border color
+     */
+    public CellAttributes getBorder() {
+        if (!isModal()
+            && (inWindowMove || inWindowResize || inKeyboardResize)
+        ) {
+            assert (isActive());
+            return getTheme().getColor("twindow.border.windowmove");
+        } else if (isModal() && inWindowMove) {
+            assert (isActive());
+            return getTheme().getColor("twindow.border.modal.windowmove");
+        } else if (isModal()) {
+            if (isActive()) {
+                return getTheme().getColor("twindow.border.modal");
+            } else {
+                return getTheme().getColor("twindow.border.modal.inactive");
+            }
+        } else if (isActive()) {
+            assert (!isModal());
+            return getTheme().getColor("twindow.border");
+        } else {
+            assert (!isModal());
+            return getTheme().getColor("twindow.border.inactive");
+        }
+    }
+
+    /**
+     * Retrieve the color used by the window movement/sizing controls.
+     *
+     * @return the color used by the zoom box, resize bar, and close box
+     */
+    public CellAttributes getBorderControls() {
+        if (isModal()) {
+            return getTheme().getColor("twindow.border.modal.windowmove");
+        }
+        return getTheme().getColor("twindow.border.windowmove");
+    }
+
+    /**
+     * Retrieve the border line type.
+     *
+     * @return the border line type
+     */
+    private int getBorderType() {
+        if (!isModal()
+            && (inWindowMove || inWindowResize || inKeyboardResize)
+        ) {
+            assert (isActive());
+            return 1;
+        } else if (isModal() && inWindowMove) {
+            assert (isActive());
+            return 1;
+        } else if (isModal()) {
+            if (isActive()) {
+                return 2;
+            } else {
+                return 1;
+            }
+        } else if (isActive()) {
+            return 2;
+        } else {
+            return 1;
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -1217,6 +1500,5 @@ public class TWindow extends TWidget {
 
         getScreen().hLineXY(x, y, n, ch, attr);
     }
-
 
 }

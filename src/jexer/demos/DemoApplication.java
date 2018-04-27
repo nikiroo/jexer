@@ -29,53 +29,21 @@
 package jexer.demos;
 
 import java.io.*;
-import java.util.*;
 
 import jexer.*;
 import jexer.event.*;
 import jexer.menu.*;
+import jexer.backend.Backend;
+import jexer.backend.SwingTerminal;
 
 /**
  * The demo application itself.
  */
 public class DemoApplication extends TApplication {
 
-    /**
-     * Add all the widgets of the demo.
-     */
-    private void addAllWidgets() {
-        new DemoMainWindow(this);
-
-        // Add the menus
-        addFileMenu();
-        addEditMenu();
-
-        TMenu demoMenu = addMenu("&Demo");
-        TMenuItem item = demoMenu.addItem(2000, "&Checkable");
-        item.setCheckable(true);
-        item = demoMenu.addItem(2001, "Disabled");
-        item.setEnabled(false);
-        item = demoMenu.addItem(2002, "&Normal");
-        TSubMenu subMenu = demoMenu.addSubMenu("Sub-&Menu");
-        item = demoMenu.addItem(2010, "N&ormal A&&D");
-        item = demoMenu.addItem(2050, "Co&lors...");
-
-        item = subMenu.addItem(2000, "&Checkable (sub)");
-        item.setCheckable(true);
-        item = subMenu.addItem(2001, "Disabled (sub)");
-        item.setEnabled(false);
-        item = subMenu.addItem(2002, "&Normal (sub)");
-
-        subMenu = subMenu.addSubMenu("Sub-&Menu");
-        item = subMenu.addItem(2000, "&Checkable (sub)");
-        item.setCheckable(true);
-        item = subMenu.addItem(2001, "Disabled (sub)");
-        item.setEnabled(false);
-        item = subMenu.addItem(2002, "&Normal (sub)");
-
-        addWindowMenu();
-        addHelpMenu();
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
@@ -134,49 +102,14 @@ public class DemoApplication extends TApplication {
     }
 
     /**
-     * Handle menu events.
+     * Public constructor.
      *
-     * @param menu menu event
-     * @return if true, the event was processed and should not be passed onto
-     * a window
+     * @param backend a Backend that is already ready to go.
      */
-    @Override
-    public boolean onMenu(final TMenuEvent menu) {
+    public DemoApplication(final Backend backend) {
+        super(backend);
 
-        if (menu.getId() == 2050) {
-            new TEditColorThemeWindow(this);
-            return true;
-        }
-
-        if (menu.getId() == TMenu.MID_OPEN_FILE) {
-            try {
-                String filename = fileOpenBox(".");
-                 if (filename != null) {
-                     try {
-                         File file = new File(filename);
-                         StringBuilder fileContents = new StringBuilder();
-                         Scanner scanner = new Scanner(file);
-                         String EOL = System.getProperty("line.separator");
-
-                         try {
-                             while (scanner.hasNextLine()) {
-                                 fileContents.append(scanner.nextLine() + EOL);
-                             }
-                             new DemoTextWindow(this, filename,
-                                 fileContents.toString());
-                         } finally {
-                             scanner.close();
-                         }
-                     } catch (IOException e) {
-                         e.printStackTrace();
-                     }
-                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return true;
-        }
-        return super.onMenu(menu);
+        addAllWidgets();
     }
 
     /**
@@ -190,4 +123,104 @@ public class DemoApplication extends TApplication {
         addAllWidgets();
         getBackend().setTitle("Jexer Demo Application");
     }
+
+    // ------------------------------------------------------------------------
+    // TApplication -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Handle menu events.
+     *
+     * @param menu menu event
+     * @return if true, the event was processed and should not be passed onto
+     * a window
+     */
+    @Override
+    public boolean onMenu(final TMenuEvent menu) {
+
+        if (menu.getId() == 3000) {
+            // Bigger +2
+            assert (getScreen() instanceof SwingTerminal);
+            SwingTerminal terminal = (SwingTerminal) getScreen();
+            terminal.setFontSize(terminal.getFontSize() + 2);
+            return true;
+        }
+        if (menu.getId() == 3001) {
+            // Smaller -2
+            assert (getScreen() instanceof SwingTerminal);
+            SwingTerminal terminal = (SwingTerminal) getScreen();
+            terminal.setFontSize(terminal.getFontSize() - 2);
+            return true;
+        }
+
+        if (menu.getId() == 2050) {
+            new TEditColorThemeWindow(this);
+            return true;
+        }
+
+        if (menu.getId() == TMenu.MID_OPEN_FILE) {
+            try {
+                String filename = fileOpenBox(".");
+                 if (filename != null) {
+                     try {
+                         new TEditorWindow(this, new File(filename));
+                     } catch (IOException e) {
+                         e.printStackTrace();
+                     }
+                 }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return true;
+        }
+        return super.onMenu(menu);
+    }
+
+    // ------------------------------------------------------------------------
+    // DemoApplication --------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Add all the widgets of the demo.
+     */
+    private void addAllWidgets() {
+        new DemoMainWindow(this);
+
+        // Add the menus
+        addFileMenu();
+        addEditMenu();
+
+        TMenu demoMenu = addMenu("&Demo");
+        TMenuItem item = demoMenu.addItem(2000, "&Checkable");
+        item.setCheckable(true);
+        item = demoMenu.addItem(2001, "Disabled");
+        item.setEnabled(false);
+        item = demoMenu.addItem(2002, "&Normal");
+        TSubMenu subMenu = demoMenu.addSubMenu("Sub-&Menu");
+        item = demoMenu.addItem(2010, "N&ormal A&&D");
+        item = demoMenu.addItem(2050, "Co&lors...");
+
+        item = subMenu.addItem(2000, "&Checkable (sub)");
+        item.setCheckable(true);
+        item = subMenu.addItem(2001, "Disabled (sub)");
+        item.setEnabled(false);
+        item = subMenu.addItem(2002, "&Normal (sub)");
+
+        subMenu = subMenu.addSubMenu("Sub-&Menu");
+        item = subMenu.addItem(2000, "&Checkable (sub)");
+        item.setCheckable(true);
+        item = subMenu.addItem(2001, "Disabled (sub)");
+        item.setEnabled(false);
+        item = subMenu.addItem(2002, "&Normal (sub)");
+
+        if (getScreen() instanceof SwingTerminal) {
+            TMenu swingMenu = addMenu("Swin&g");
+            item = swingMenu.addItem(3000, "&Bigger +2");
+            item = swingMenu.addItem(3001, "&Smaller -2");
+        }
+
+        addWindowMenu();
+        addHelpMenu();
+    }
+
 }
