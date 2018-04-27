@@ -28,28 +28,37 @@
  */
 package jexer;
 
-import java.io.InputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
+import java.text.MessageFormat;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.ResourceBundle;
 
 import jexer.bits.Cell;
 import jexer.bits.CellAttributes;
 import jexer.event.TKeypressEvent;
+import jexer.event.TMenuEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
+import jexer.menu.TMenu;
 import jexer.tterminal.DisplayLine;
+import jexer.tterminal.DisplayListener;
 import jexer.tterminal.ECMA48;
 import static jexer.TKeypress.*;
 
 /**
  * TTerminalWindow exposes a ECMA-48 / ANSI X3.64 style terminal in a window.
  */
-public class TTerminalWindow extends TWindow {
+public class TTerminalWindow extends TScrollableWindow
+                             implements DisplayListener {
+
+
+    /**
+     * Translated strings.
+     */
+    private static final ResourceBundle i18n = ResourceBundle.getBundle(TTerminalWindow.class.getName());
 
     /**
      * The emulator.
@@ -62,9 +71,11 @@ public class TTerminalWindow extends TWindow {
     private Process shell;
 
     /**
-     * Vertical scrollbar.
+     * If true, we are using the ptypipe utility to support dynamic window
+     * resizing.  ptypipe is available at
+     * https://github.com/klamonte/ptypipe .
      */
-    private TVScroller vScroller;
+    private boolean ptypipe = false;
 
     /**
      * Claim the keystrokes the emulator will need.
@@ -137,50 +148,42 @@ public class TTerminalWindow extends TWindow {
     }
 
     /**
-     * Public constructor spawns a shell.
+     * Convert a string array to a whitespace-separated string.
      *
-     * @param application TApplication that manages this window
-     * @param x column relative to parent
-     * @param y row relative to parent
-     * @param flags mask of CENTERED, MODAL, or RESIZABLE
+     * @param array the string array
+     * @return a single string
      */
-    public TTerminalWindow(final TApplication application, final int x,
-        final int y, final int flags) {
+    private String stringArrayToString(final String [] array) {
+        StringBuilder sb = new StringBuilder(array[0].length());
+        for (int i = 0; i < array.length; i++) {
+            sb.append(array[i]);
+            if (i < array.length - 1) {
+                sb.append(' ');
+            }
+        }
+        return sb.toString();
+    }
 
-        super(application, "Terminal", x, y, 80 + 2, 24 + 2, flags);
+    /**
+     * Spawn the shell.
+     *
+     * @param command the command line to execute
+     */
+    private void spawnShell(final String [] command) {
+
+        /*
+        System.err.printf("spawnShell(): '%s'\n",
+            stringArrayToString(command));
+        */
+
+        vScroller = new TVScroller(this, getWidth() - 2, 0, getHeight() - 2);
+        setBottomValue(0);
 
         // Assume XTERM
         ECMA48.DeviceType deviceType = ECMA48.DeviceType.XTERM;
 
         try {
-            String [] cmdShellWindows = {
-                "cmd.exe"
-            };
-
-            // You cannot run a login shell in a bare Process interactively,
-            // due to libc's behavior of buffering when stdin/stdout aren't a
-            // tty.  Use 'script' instead to run a shell in a pty.  And
-            // because BSD and GNU differ on the '-f' vs '-F' flags, we need
-            // two different commands.  Lovely.
-            String [] cmdShellGNU = {
-                "script", "-fqe", "/dev/null"
-            };
-            String [] cmdShellBSD = {
-                "script", "-q", "-F", "/dev/null"
-            };
-            // Spawn a shell and pass its I/O to the other constructor.
-
-            ProcessBuilder pb;
-            if (System.getProperty("os.name").startsWith("Windows")) {
-                pb = new ProcessBuilder(cmdShellWindows);
-            } else if (System.getProperty("os.name").startsWith("Mac")) {
-                pb = new ProcessBuilder(cmdShellBSD);
-            } else if (System.getProperty("os.name").startsWith("Linux")) {
-                pb = new ProcessBuilder(cmdShellGNU);
-            } else {
-                // When all else fails, assume GNU.
-                pb = new ProcessBuilder(cmdShellGNU);
-            }
+            ProcessBuilder pb = new ProcessBuilder(command);
             Map<String, String> env = pb.environment();
             env.put("TERM", ECMA48.deviceTypeTerm(deviceType));
             env.put("LANG", ECMA48.deviceTypeLang(deviceType, "en"));
@@ -189,9 +192,11 @@ public class TTerminalWindow extends TWindow {
             pb.redirectErrorStream(true);
             shell = pb.start();
             emulator = new ECMA48(deviceType, shell.getInputStream(),
-                shell.getOutputStream());
+                shell.getOutputStream(), this);
         } catch (IOException e) {
-            e.printStackTrace();
+            messageBox(i18n.getString("errorLaunchingShellTitle"),
+                MessageFormat.format(i18n.getString("errorLaunchingShellText"),
+                    e.getMessage()));
         }
 
         // Setup the scroll bars
@@ -202,7 +207,118 @@ public class TTerminalWindow extends TWindow {
         addShortcutKeys();
 
         // Add shortcut text
-        newStatusBar("Terminal session executing...");
+        newStatusBar(i18n.getString("statusBarRunning"));
+    }
+
+    /**
+     * Public constructor spawns a custom command line.
+     *
+     * @param application TApplication that manages this window
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param commandLine the command line to execute
+     */
+    public TTerminalWindow(final TApplication application, final int x,
+        final int y, final String commandLine) {
+
+        this(application, x, y, RESIZABLE, commandLine.split("\\s"));
+    }
+
+    /**
+     * Public constructor spawns a custom command line.
+     *
+     * @param application TApplication that manages this window
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param flags mask of CENTERED, MODAL, or RESIZABLE
+     * @param command the command line to execute
+     */
+    public TTerminalWindow(final TApplication application, final int x,
+        final int y, final int flags, final String [] command) {
+
+        super(application, i18n.getString("windowTitle"), x, y,
+            80 + 2, 24 + 2, flags);
+
+        String [] fullCommand;
+
+        // Spawn a shell and pass its I/O to the other constructor.
+        if ((System.getProperty("jexer.TTerminal.ptypipe") != null)
+            && (System.getProperty("jexer.TTerminal.ptypipe").
+                equals("true"))
+        ) {
+            ptypipe = true;
+            fullCommand = new String[command.length + 1];
+            fullCommand[0] = "ptypipe";
+            System.arraycopy(command, 0, fullCommand, 1, command.length);
+        } else if (System.getProperty("os.name").startsWith("Windows")) {
+            fullCommand = new String[3];
+            fullCommand[0] = "cmd";
+            fullCommand[1] = "/c";
+            fullCommand[2] = stringArrayToString(command);
+        } else if (System.getProperty("os.name").startsWith("Mac")) {
+            fullCommand = new String[6];
+            fullCommand[0] = "script";
+            fullCommand[1] = "-q";
+            fullCommand[2] = "-F";
+            fullCommand[3] = "/dev/null";
+            fullCommand[4] = "-c";
+            fullCommand[5] = stringArrayToString(command);
+        } else {
+            // Default: behave like Linux
+            fullCommand = new String[5];
+            fullCommand[0] = "script";
+            fullCommand[1] = "-fqe";
+            fullCommand[2] = "/dev/null";
+            fullCommand[3] = "-c";
+            fullCommand[4] = stringArrayToString(command);
+        }
+        spawnShell(fullCommand);
+    }
+
+    /**
+     * Public constructor spawns a shell.
+     *
+     * @param application TApplication that manages this window
+     * @param x column relative to parent
+     * @param y row relative to parent
+     * @param flags mask of CENTERED, MODAL, or RESIZABLE
+     */
+    public TTerminalWindow(final TApplication application, final int x,
+        final int y, final int flags) {
+
+        super(application, i18n.getString("windowTitle"), x, y,
+            80 + 2, 24 + 2, flags);
+
+        String cmdShellWindows = "cmd.exe";
+
+        // You cannot run a login shell in a bare Process interactively, due
+        // to libc's behavior of buffering when stdin/stdout aren't a tty.
+        // Use 'script' instead to run a shell in a pty.  And because BSD and
+        // GNU differ on the '-f' vs '-F' flags, we need two different
+        // commands.  Lovely.
+        String cmdShellGNU = "script -fqe /dev/null";
+        String cmdShellBSD = "script -q -F /dev/null";
+
+        // ptypipe is another solution that permits dynamic window resizing.
+        String cmdShellPtypipe = "ptypipe /bin/bash --login";
+
+        // Spawn a shell and pass its I/O to the other constructor.
+        if ((System.getProperty("jexer.TTerminal.ptypipe") != null)
+            && (System.getProperty("jexer.TTerminal.ptypipe").
+                equals("true"))
+        ) {
+            ptypipe = true;
+            spawnShell(cmdShellPtypipe.split("\\s"));
+        } else if (System.getProperty("os.name").startsWith("Windows")) {
+            spawnShell(cmdShellWindows.split("\\s"));
+        } else if (System.getProperty("os.name").startsWith("Mac")) {
+            spawnShell(cmdShellBSD.split("\\s"));
+        } else if (System.getProperty("os.name").startsWith("Linux")) {
+            spawnShell(cmdShellGNU.split("\\s"));
+        } else {
+            // When all else fails, assume GNU.
+            spawnShell(cmdShellGNU.split("\\s"));
+        }
     }
 
     /**
@@ -239,39 +355,6 @@ public class TTerminalWindow extends TWindow {
     }
 
     /**
-     * Public constructor.
-     *
-     * @param application TApplication that manages this window
-     * @param x column relative to parent
-     * @param y row relative to parent
-     * @param flags mask of CENTERED, MODAL, or RESIZABLE
-     * @param input an InputStream connected to the remote side.  For type ==
-     * XTERM, input is converted to a Reader with UTF-8 encoding.
-     * @param output an OutputStream connected to the remote user.  For type
-     * == XTERM, output is converted to a Writer with UTF-8 encoding.
-     * @throws UnsupportedEncodingException if an exception is thrown when
-     * creating the InputStreamReader
-     */
-    public TTerminalWindow(final TApplication application, final int x,
-        final int y, final int flags, final InputStream input,
-        final OutputStream output) throws UnsupportedEncodingException {
-
-        super(application, "Terminal", x, y, 80 + 2, 24 + 2, flags);
-
-        emulator = new ECMA48(ECMA48.DeviceType.XTERM, input, output);
-
-        // Setup the scroll bars
-        onResize(new TResizeEvent(TResizeEvent.Type.WIDGET, getWidth(),
-                getHeight()));
-
-        // Claim the keystrokes the emulator will need.
-        addShortcutKeys();
-
-        // Add shortcut text
-        newStatusBar("Terminal session executing...");
-    }
-
-    /**
      * Draw the display buffer.
      */
     @Override
@@ -281,7 +364,7 @@ public class TTerminalWindow extends TWindow {
         synchronized (emulator) {
 
             // Update the scroll bars
-            reflow();
+            reflowData();
 
             // Draw the box using my superclass
             super.draw();
@@ -292,7 +375,7 @@ public class TTerminalWindow extends TWindow {
             // Put together the visible rows
             int visibleHeight = getHeight() - 2;
             int visibleBottom = scrollback.size() + display.size()
-                + vScroller.getValue();
+                + getVerticalValue();
             assert (visibleBottom >= 0);
 
             List<DisplayLine> preceedingBlankLines = new LinkedList<DisplayLine>();
@@ -334,8 +417,18 @@ public class TTerminalWindow extends TWindow {
                     boolean reverse = line.isReverseColor() ^ ch.isReverse();
                     newCell.setReverse(false);
                     if (reverse) {
-                        newCell.setBackColor(ch.getForeColor());
-                        newCell.setForeColor(ch.getBackColor());
+                        if (ch.getForeColorRGB() < 0) {
+                            newCell.setBackColor(ch.getForeColor());
+                            newCell.setBackColorRGB(-1);
+                        } else {
+                            newCell.setBackColorRGB(ch.getForeColorRGB());
+                        }
+                        if (ch.getBackColorRGB() < 0) {
+                            newCell.setForeColor(ch.getBackColor());
+                            newCell.setForeColorRGB(-1);
+                        } else {
+                            newCell.setForeColorRGB(ch.getBackColorRGB());
+                        }
                     }
                     if (line.isDoubleWidth()) {
                         getScreen().putCharXY((i * 2) + 1, row, newCell);
@@ -362,6 +455,37 @@ public class TTerminalWindow extends TWindow {
     }
 
     /**
+     * Called by emulator when fresh data has come in.
+     */
+    public void displayChanged() {
+        getApplication().postEvent(new TMenuEvent(TMenu.MID_REPAINT));
+    }
+
+    /**
+     * Function to call to obtain the display width.
+     *
+     * @return the number of columns in the display
+     */
+    public int getDisplayWidth() {
+        if (ptypipe) {
+            return getWidth() - 2;
+        }
+        return 80;
+    }
+
+    /**
+     * Function to call to obtain the display height.
+     *
+     * @return the number of rows in the display
+     */
+    public int getDisplayHeight() {
+        if (ptypipe) {
+            return getHeight() - 2;
+        }
+        return 24;
+    }
+
+    /**
      * Handle window close.
      */
     @Override
@@ -375,6 +499,13 @@ public class TTerminalWindow extends TWindow {
     }
 
     /**
+     * Hook for subclasses to be notified of the shell termination.
+     */
+    public void onShellExit() {
+        getApplication().postEvent(new TMenuEvent(TMenu.MID_REPAINT));
+    }
+
+    /**
      * Copy out variables from the emulator that TTerminal has to expose on
      * screen.
      */
@@ -385,10 +516,8 @@ public class TTerminalWindow extends TWindow {
 
             setCursorX(emulator.getCursorX() + 1);
             setCursorY(emulator.getCursorY() + 1
-                + (getHeight() - 2 - emulator.getHeight()));
-            if (vScroller != null) {
-                setCursorY(getCursorY() - vScroller.getValue());
-            }
+                + (getHeight() - 2 - emulator.getHeight())
+                - getVerticalValue());
             setCursorVisible(emulator.isCursorVisible());
             if (getCursorX() > getWidth() - 2) {
                 setCursorVisible(false);
@@ -408,13 +537,14 @@ public class TTerminalWindow extends TWindow {
                 try {
                     int rc = shell.exitValue();
                     // The emulator exited on its own, all is fine
-                    setTitle(String.format("%s [Completed - %d]",
-                            getTitle(), rc));
+                    setTitle(MessageFormat.format(i18n.
+                            getString("windowTitleCompleted"), getTitle(), rc));
                     shell = null;
                     emulator.close();
                     clearShortcutKeypresses();
-                    statusBar.setText("Terminal session completed, exit " +
-                        "code " + rc + ".");
+                    statusBar.setText(MessageFormat.format(i18n.
+                            getString("statusBarCompleted"), rc));
+                    onShellExit();
                 } catch (IllegalThreadStateException e) {
                     // The emulator thread has exited, but the shell Process
                     // hasn't figured that out yet.  Do nothing, we will see
@@ -425,13 +555,14 @@ public class TTerminalWindow extends TWindow {
                 try {
                     int rc = shell.exitValue();
                     // If we got here, the shell died.
-                    setTitle(String.format("%s [Completed - %d]",
-                            getTitle(), rc));
+                    setTitle(MessageFormat.format(i18n.
+                            getString("windowTitleCompleted"), getTitle(), rc));
                     shell = null;
                     emulator.close();
                     clearShortcutKeypresses();
-                    statusBar.setText("Terminal session completed, exit " +
-                        "code " + rc + ".");
+                    statusBar.setText(MessageFormat.format(i18n.
+                            getString("statusBarCompleted"), rc));
+                    onShellExit();
                 } catch (IllegalThreadStateException e) {
                     // The shell is still running, do nothing.
                 }
@@ -454,10 +585,19 @@ public class TTerminalWindow extends TWindow {
 
             if (resize.getType() == TResizeEvent.Type.WIDGET) {
                 // Resize the scroll bars
-                reflow();
+                reflowData();
+                placeScrollbars();
 
                 // Get out of scrollback
-                vScroller.setValue(0);
+                setVerticalValue(0);
+
+                if (ptypipe) {
+                    emulator.setWidth(getWidth() - 2);
+                    emulator.setHeight(getHeight() - 2);
+
+                    emulator.writeRemote("\033[8;" + (getHeight() - 2) + ";" +
+                        (getWidth() - 2) + "t");
+                }
             }
             return;
 
@@ -467,7 +607,8 @@ public class TTerminalWindow extends TWindow {
     /**
      * Resize scrollbars for a new width/height.
      */
-    private void reflow() {
+    @Override
+    public void reflowData() {
 
         // Synchronize against the emulator so we don't stomp on its reader
         // thread.
@@ -477,19 +618,10 @@ public class TTerminalWindow extends TWindow {
             readEmulatorState();
 
             // Vertical scrollbar
-            if (vScroller == null) {
-                vScroller = new TVScroller(this, getWidth() - 2, 0,
-                    getHeight() - 2);
-                vScroller.setBottomValue(0);
-                vScroller.setValue(0);
-            } else {
-                vScroller.setX(getWidth() - 2);
-                vScroller.setHeight(getHeight() - 2);
-            }
-            vScroller.setTopValue(getHeight() - 2
+            setTopValue(getHeight() - 2
                 - (emulator.getScrollbackBuffer().size()
                     + emulator.getDisplayBuffer().size()));
-            vScroller.setBigChange(getHeight() - 2);
+            setVerticalBigChange(getHeight() - 2);
 
         } // synchronized (emulator)
     }
@@ -532,14 +664,14 @@ public class TTerminalWindow extends TWindow {
             || keypress.equals(kbCtrlPgUp)
             || keypress.equals(kbAltPgUp)
         ) {
-            vScroller.bigDecrement();
+            bigVerticalDecrement();
             return;
         }
         if (keypress.equals(kbShiftPgDn)
             || keypress.equals(kbCtrlPgDn)
             || keypress.equals(kbAltPgDn)
         ) {
-            vScroller.bigIncrement();
+            bigVerticalIncrement();
             return;
         }
 
@@ -548,7 +680,7 @@ public class TTerminalWindow extends TWindow {
         synchronized (emulator) {
             if (emulator.isReading()) {
                 // Get out of scrollback
-                vScroller.setValue(0);
+                setVerticalValue(0);
                 emulator.keypress(keypress.getKey());
 
                 // UGLY HACK TIME!  cmd.exe needs CRLF, not just CR, so if
@@ -582,11 +714,11 @@ public class TTerminalWindow extends TWindow {
         }
 
         if (mouse.isMouseWheelUp()) {
-            vScroller.decrement();
+            verticalDecrement();
             return;
         }
         if (mouse.isMouseWheelDown()) {
-            vScroller.increment();
+            verticalIncrement();
             return;
         }
         if (mouseOnEmulator(mouse)) {

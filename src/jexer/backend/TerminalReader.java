@@ -26,9 +26,44 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
+package jexer.backend;
+
+import java.util.List;
+
+import jexer.event.TInputEvent;
 
 /**
- * This package contains classes to encapsulate text terminal metadata:
- * width, height, username, language, etc.
+ * TerminalReader provides keyboard and mouse events.
  */
-package jexer.session;
+public interface TerminalReader {
+
+    /**
+     * Check if there are events in the queue.
+     *
+     * @return if true, getEvents() has something to return to the backend
+     */
+    public boolean hasEvents();
+
+    /**
+     * Classes must provide an implementation to get keyboard, mouse, and
+     * screen resize events.
+     *
+     * @param queue list to append new events to
+     */
+    public void getEvents(List<TInputEvent> queue);
+
+    /**
+     * Classes must provide an implementation that closes sockets, restores
+     * console, etc.
+     */
+    public void closeTerminal();
+
+    /**
+     * Set listener to a different Object.
+     *
+     * @param listener the new listening object that run() wakes up on new
+     * input
+     */
+    public void setListener(final Object listener);
+
+}

@@ -31,69 +31,69 @@ package jexer.backend;
 import java.util.List;
 
 import jexer.event.TInputEvent;
-import jexer.io.Screen;
-import jexer.session.SessionInfo;
 
 /**
- * This abstract class provides a screen, keyboard, and mouse to
- * TApplication.  It also exposes session information as gleaned from lower
- * levels of the communication stack.
+ * This interface provides a screen, keyboard, and mouse to TApplication.  It
+ * also exposes session information as gleaned from lower levels of the
+ * communication stack.
  */
-public abstract class Backend {
+public interface Backend {
 
     /**
-     * The session information.
-     */
-    protected SessionInfo sessionInfo;
-
-    /**
-     * Getter for sessionInfo.
+     * Get a SessionInfo, which exposes text width/height, language,
+     * username, and other information from the communication stack.
      *
      * @return the SessionInfo
      */
-    public final SessionInfo getSessionInfo() {
-        return sessionInfo;
-    }
+    public SessionInfo getSessionInfo();
 
     /**
-     * The screen to draw on.
-     */
-    protected Screen screen;
-
-    /**
-     * Getter for screen.
+     * Get a Screen, which displays the text cells to the user.
      *
      * @return the Screen
      */
-    public final Screen getScreen() {
-        return screen;
-    }
+    public Screen getScreen();
 
     /**
-     * Subclasses must provide an implementation that syncs the logical
-     * screen to the physical device.
+     * Classes must provide an implementation that syncs the logical screen
+     * to the physical device.
      */
-    public abstract void flushScreen();
+    public void flushScreen();
 
     /**
-     * Subclasses must provide an implementation to get keyboard, mouse, and
+     * Check if there are events in the queue.
+     *
+     * @return if true, getEvents() has something to return to the application
+     */
+    public boolean hasEvents();
+
+    /**
+     * Classes must provide an implementation to get keyboard, mouse, and
      * screen resize events.
      *
      * @param queue list to append new events to
      */
-    public abstract void getEvents(List<TInputEvent> queue);
+    public void getEvents(List<TInputEvent> queue);
 
     /**
-     * Subclasses must provide an implementation that closes sockets,
-     * restores console, etc.
+     * Classes must provide an implementation that closes sockets, restores
+     * console, etc.
      */
-    public abstract void shutdown();
+    public void shutdown();
 
     /**
-     * Subclasses must provide an implementation that sets the window title.
+     * Classes must provide an implementation that sets the window title.
      *
      * @param title the new title
      */
-    public abstract void setTitle(final String title);
+    public void setTitle(final String title);
+
+    /**
+     * Set listener to a different Object.
+     *
+     * @param listener the new listening object that run() wakes up on new
+     * input
+     */
+    public void setListener(final Object listener);
 
 }

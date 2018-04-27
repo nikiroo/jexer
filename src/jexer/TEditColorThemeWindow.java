@@ -29,6 +29,7 @@
 package jexer;
 
 import java.util.List;
+import java.util.ResourceBundle;
 
 import jexer.bits.Color;
 import jexer.bits.ColorTheme;
@@ -43,7 +44,36 @@ import static jexer.TKeypress.*;
  * color theme.
  *
  */
-public final class TEditColorThemeWindow extends TWindow {
+public class TEditColorThemeWindow extends TWindow {
+
+    /**
+     * Translated strings.
+     */
+    private static final ResourceBundle i18n = ResourceBundle.getBundle(TEditColorThemeWindow.class.getName());
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * The current editing theme.
+     */
+    private ColorTheme editTheme;
+
+    /**
+     * The left-side list of colors pane.
+     */
+    private TList colorNames;
+
+    /**
+     * The foreground color.
+     */
+    private ForegroundPicker foreground;
+
+    /**
+     * The background color.
+     */
+    private BackgroundPicker background;
 
     /**
      * The foreground color picker.
@@ -197,7 +227,8 @@ public final class TEditColorThemeWindow extends TWindow {
                 attr.setForeColor(getTheme().getColor("tlabel").getForeColor());
                 attr.setBold(getTheme().getColor("tlabel").isBold());
             }
-            getScreen().putStringXY(1, 0, " Foreground ", attr);
+            getScreen().putStringXY(1, 0, i18n.getString("foregroundLabel"),
+                attr);
 
             // Have to draw the colors manually because the int value matches
             // SGR, not CGA.
@@ -470,7 +501,8 @@ public final class TEditColorThemeWindow extends TWindow {
                 attr.setForeColor(getTheme().getColor("tlabel").getForeColor());
                 attr.setBold(getTheme().getColor("tlabel").isBold());
             }
-            getScreen().putStringXY(1, 0, " Background ", attr);
+            getScreen().putStringXY(1, 0, i18n.getString("backgroundLabel"),
+                attr);
 
             // Have to draw the colors manually because the int value matches
             // SGR, not CGA.
@@ -594,53 +626,9 @@ public final class TEditColorThemeWindow extends TWindow {
 
     }
 
-    /**
-     * The current editing theme.
-     */
-    private ColorTheme editTheme;
-
-    /**
-     * The left-side list of colors pane.
-     */
-    private TList colorNames;
-
-    /**
-     * The foreground color.
-     */
-    private ForegroundPicker foreground;
-
-    /**
-     * The background color.
-     */
-    private BackgroundPicker background;
-
-    /**
-     * Set various widgets/values to the editing theme color.
-     *
-     * @param colorName name of color from theme
-     */
-    private void refreshFromTheme(final String colorName) {
-        CellAttributes attr = editTheme.getColor(colorName);
-        foreground.color = attr.getForeColor();
-        foreground.bold = attr.isBold();
-        background.color = attr.getBackColor();
-    }
-
-    /**
-     * Examines foreground, background, and colorNames and sets the color in
-     * editTheme.
-     */
-    private void saveToEditTheme() {
-        String colorName = colorNames.getSelected();
-        if (colorName == null) {
-            return;
-        }
-        CellAttributes attr = editTheme.getColor(colorName);
-        attr.setForeColor(foreground.color);
-        attr.setBold(foreground.bold);
-        attr.setBackColor(background.color);
-        editTheme.setColor(colorName, attr);
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.  The file open box will be centered on screen.
@@ -650,7 +638,7 @@ public final class TEditColorThemeWindow extends TWindow {
     public TEditColorThemeWindow(final TApplication application) {
 
         // Register with the TApplication
-        super(application, "Colors", 0, 0, 60, 18, MODAL);
+        super(application, i18n.getString("windowTitle"), 0, 0, 60, 18, MODAL);
 
         // Initialize with the first color
         List<String> colors = getTheme().getColorNames();
@@ -681,7 +669,7 @@ public final class TEditColorThemeWindow extends TWindow {
         refreshFromTheme(colors.get(0));
         colorNames.setSelectedIndex(0);
 
-        addButton("  &OK  ", getWidth() - 37, getHeight() - 4,
+        addButton(i18n.getString("okButton"), getWidth() - 37, getHeight() - 4,
             new TAction() {
                 public void DO() {
                     ColorTheme global = getTheme();
@@ -696,7 +684,8 @@ public final class TEditColorThemeWindow extends TWindow {
             }
         );
 
-        addButton("&Cancel", getWidth() - 25, getHeight() - 4,
+        addButton(i18n.getString("cancelButton"), getWidth() - 25,
+            getHeight() - 4,
             new TAction() {
                 public void DO() {
                     getApplication().closeWindow(TEditColorThemeWindow.this);
@@ -708,35 +697,12 @@ public final class TEditColorThemeWindow extends TWindow {
         activate(colorNames);
 
         // Add shortcut text
-        newStatusBar("Select Colors");
+        newStatusBar(i18n.getString("statusBar"));
     }
 
-    /**
-     * Draw me on screen.
-     */
-    @Override
-    public void draw() {
-        super.draw();
-        CellAttributes attr = new CellAttributes();
-
-        // Draw the label on colorNames
-        attr.setTo(getTheme().getColor("twindow.background.modal"));
-        if (colorNames.isActive()) {
-            attr.setForeColor(getTheme().getColor("tlabel").getForeColor());
-            attr.setBold(getTheme().getColor("tlabel").isBold());
-        }
-        getScreen().putStringXY(3, 2, "Color Name", attr);
-
-        // Draw the sample text box
-        attr.reset();
-        attr.setForeColor(foreground.color);
-        attr.setBold(foreground.bold);
-        attr.setBackColor(background.color);
-        getScreen().putStringXY(getWidth() - 17, getHeight() - 6,
-            "Text Text Text", attr);
-        getScreen().putStringXY(getWidth() - 17, getHeight() - 5,
-            "Text Text Text", attr);
-    }
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Handle keystrokes.
@@ -753,6 +719,69 @@ public final class TEditColorThemeWindow extends TWindow {
 
         // Pass to my parent
         super.onKeypress(keypress);
+    }
+
+    // ------------------------------------------------------------------------
+    // TWindow ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Draw me on screen.
+     */
+    @Override
+    public void draw() {
+        super.draw();
+        CellAttributes attr = new CellAttributes();
+
+        // Draw the label on colorNames
+        attr.setTo(getTheme().getColor("twindow.background.modal"));
+        if (colorNames.isActive()) {
+            attr.setForeColor(getTheme().getColor("tlabel").getForeColor());
+            attr.setBold(getTheme().getColor("tlabel").isBold());
+        }
+        getScreen().putStringXY(3, 2, i18n.getString("colorName"), attr);
+
+        // Draw the sample text box
+        attr.reset();
+        attr.setForeColor(foreground.color);
+        attr.setBold(foreground.bold);
+        attr.setBackColor(background.color);
+        getScreen().putStringXY(getWidth() - 17, getHeight() - 6,
+            i18n.getString("textTextText"), attr);
+        getScreen().putStringXY(getWidth() - 17, getHeight() - 5,
+            i18n.getString("textTextText"), attr);
+    }
+
+    // ------------------------------------------------------------------------
+    // TEditColorThemeWindow --------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Set various widgets/values to the editing theme color.
+     *
+     * @param colorName name of color from theme
+     */
+    private void refreshFromTheme(final String colorName) {
+        CellAttributes attr = editTheme.getColor(colorName);
+        foreground.color = attr.getForeColor();
+        foreground.bold = attr.isBold();
+        background.color = attr.getBackColor();
+    }
+
+    /**
+     * Examines foreground, background, and colorNames and sets the color in
+     * editTheme.
+     */
+    private void saveToEditTheme() {
+        String colorName = colorNames.getSelected();
+        if (colorName == null) {
+            return;
+        }
+        CellAttributes attr = editTheme.getColor(colorName);
+        attr.setForeColor(foreground.color);
+        attr.setBold(foreground.bold);
+        attr.setBackColor(background.color);
+        editTheme.setColor(colorName, attr);
     }
 
 }

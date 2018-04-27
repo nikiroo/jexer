@@ -42,21 +42,16 @@ import static jexer.TKeypress.*;
  *
  * @see TAction#DO()
  */
-public final class TButton extends TWidget {
+public class TButton extends TWidget {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * The shortcut and button text.
      */
     private MnemonicString mnemonic;
-
-    /**
-     * Get the mnemonic string for this button.
-     *
-     * @return mnemonic string
-     */
-    public MnemonicString getMnemonic() {
-        return mnemonic;
-    }
 
     /**
      * Remember mouse state.
@@ -73,15 +68,9 @@ public final class TButton extends TWidget {
      */
     private TAction action;
 
-    /**
-     * Act as though the button was pressed.  This is useful for other UI
-     * elements to get the same action as if the user clicked the button.
-     */
-    public void dispatch() {
-        if (action != null) {
-            action.DO();
-        }
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Private constructor.
@@ -121,6 +110,10 @@ public final class TButton extends TWidget {
         this.action = action;
     }
 
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Returns true if the mouse is currently on the button.
      *
@@ -140,6 +133,74 @@ public final class TButton extends TWidget {
         }
         return false;
     }
+
+    /**
+     * Handle mouse button presses.
+     *
+     * @param mouse mouse button event
+     */
+    @Override
+    public void onMouseDown(final TMouseEvent mouse) {
+        this.mouse = mouse;
+
+        if ((mouseOnButton()) && (mouse.isMouse1())) {
+            // Begin button press
+            inButtonPress = true;
+        }
+    }
+
+    /**
+     * Handle mouse button releases.
+     *
+     * @param mouse mouse button release event
+     */
+    @Override
+    public void onMouseUp(final TMouseEvent mouse) {
+        this.mouse = mouse;
+
+        if (inButtonPress && mouse.isMouse1()) {
+            // Dispatch the event
+            dispatch();
+        }
+
+    }
+
+    /**
+     * Handle mouse movements.
+     *
+     * @param mouse mouse motion event
+     */
+    @Override
+    public void onMouseMotion(final TMouseEvent mouse) {
+        this.mouse = mouse;
+
+        if (!mouseOnButton()) {
+            inButtonPress = false;
+        }
+    }
+
+    /**
+     * Handle keystrokes.
+     *
+     * @param keypress keystroke event
+     */
+    @Override
+    public void onKeypress(final TKeypressEvent keypress) {
+        if (keypress.equals(kbEnter)
+            || keypress.equals(kbSpace)
+        ) {
+            // Dispatch
+            dispatch();
+            return;
+        }
+
+        // Pass to parent for the things we don't care about.
+        super.onKeypress(keypress);
+    }
+
+    // ------------------------------------------------------------------------
+    // TWidget ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Draw a button with a shadow.
@@ -190,73 +251,28 @@ public final class TButton extends TWidget {
         }
     }
 
-    /**
-     * Handle mouse button presses.
-     *
-     * @param mouse mouse button event
-     */
-    @Override
-    public void onMouseDown(final TMouseEvent mouse) {
-        this.mouse = mouse;
+    // ------------------------------------------------------------------------
+    // TButton ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
-        if ((mouseOnButton()) && (mouse.isMouse1())) {
-            // Begin button press
-            inButtonPress = true;
-        }
+    /**
+     * Get the mnemonic string for this button.
+     *
+     * @return mnemonic string
+     */
+    public MnemonicString getMnemonic() {
+        return mnemonic;
     }
 
     /**
-     * Handle mouse button releases.
-     *
-     * @param mouse mouse button release event
+     * Act as though the button was pressed.  This is useful for other UI
+     * elements to get the same action as if the user clicked the button.
      */
-    @Override
-    public void onMouseUp(final TMouseEvent mouse) {
-        this.mouse = mouse;
-
-        if (inButtonPress && mouse.isMouse1()) {
-            inButtonPress = false;
-            // Dispatch the event
-            if (action != null) {
-                action.DO();
-            }
-        }
-
-    }
-
-    /**
-     * Handle mouse movements.
-     *
-     * @param mouse mouse motion event
-     */
-    @Override
-    public void onMouseMotion(final TMouseEvent mouse) {
-        this.mouse = mouse;
-
-        if (!mouseOnButton()) {
+    public void dispatch() {
+        if (action != null) {
+            action.DO();
             inButtonPress = false;
         }
-    }
-
-    /**
-     * Handle keystrokes.
-     *
-     * @param keypress keystroke event
-     */
-    @Override
-    public void onKeypress(final TKeypressEvent keypress) {
-        if (keypress.equals(kbEnter)
-            || keypress.equals(kbSpace)
-        ) {
-            // Dispatch
-            if (action != null) {
-                action.DO();
-            }
-            return;
-        }
-
-        // Pass to parent for the things we don't care about.
-        super.onKeypress(keypress);
     }
 
 }

@@ -26,7 +26,7 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
-package jexer.io;
+package jexer.backend;
 
 import java.io.BufferedReader;
 import java.io.FileDescriptor;
@@ -40,29 +40,55 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.LinkedList;
 
+import jexer.bits.Cell;
+import jexer.bits.CellAttributes;
 import jexer.bits.Color;
 import jexer.event.TInputEvent;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
-import jexer.session.SessionInfo;
-import jexer.session.TSessionInfo;
-import jexer.session.TTYSessionInfo;
 import static jexer.TKeypress.*;
 
 /**
  * This class reads keystrokes and mouse events and emits output to ANSI
  * X3.64 / ECMA-48 type terminals e.g. xterm, linux, vt100, ansi.sys, etc.
  */
-public final class ECMA48Terminal implements Runnable {
+public class ECMA48Terminal extends LogicalScreen
+                            implements TerminalReader, Runnable {
+
+    // ------------------------------------------------------------------------
+    // Constants --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
-     * If true, emit T.416-style RGB colors.  This is a) expensive in
-     * bandwidth, and b) potentially terrible looking for non-xterms.
+     * States in the input parser.
+     */
+    private enum ParseState {
+        GROUND,
+        ESCAPE,
+        ESCAPE_INTERMEDIATE,
+        CSI_ENTRY,
+        CSI_PARAM,
+        MOUSE,
+        MOUSE_SGR,
+    }
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Emit debugging to stderr.
+     */
+    private boolean debugToStderr = false;
+
+    /**
+     * If true, emit T.416-style RGB colors for normal system colors.  This
+     * is a) expensive in bandwidth, and b) potentially terrible looking for
+     * non-xterms.
      */
     private static boolean doRgbColor = false;
 
@@ -70,15 +96,6 @@ public final class ECMA48Terminal implements Runnable {
      * The session information.
      */
     private SessionInfo sessionInfo;
-
-    /**
-     * Getter for sessionInfo.
-     *
-     * @return the SessionInfo
-     */
-    public SessionInfo getSessionInfo() {
-        return sessionInfo;
-    }
 
     /**
      * The event queue, filled up by a thread reading on input.
@@ -99,20 +116,7 @@ public final class ECMA48Terminal implements Runnable {
      * Parameters being collected.  E.g. if the string is \033[1;3m, then
      * params[0] will be 1 and params[1] will be 3.
      */
-    private ArrayList<String> params;
-
-    /**
-     * States in the input parser.
-     */
-    private enum ParseState {
-        GROUND,
-        ESCAPE,
-        ESCAPE_INTERMEDIATE,
-        CSI_ENTRY,
-        CSI_PARAM,
-        MOUSE,
-        MOUSE_SGR,
-    }
+    private List<String> params;
 
     /**
      * Current parsing state.
@@ -190,14 +194,276 @@ public final class ECMA48Terminal implements Runnable {
      */
     private Object listener;
 
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
-     * Get the output writer.
+     * Constructor sets up state for getEvent().
      *
-     * @return the Writer
+     * @param listener the object this backend needs to wake up when new
+     * input comes in
+     * @param input an InputStream connected to the remote user, or null for
+     * System.in.  If System.in is used, then on non-Windows systems it will
+     * be put in raw mode; shutdown() will (blindly!) put System.in in cooked
+     * mode.  input is always converted to a Reader with UTF-8 encoding.
+     * @param output an OutputStream connected to the remote user, or null
+     * for System.out.  output is always converted to a Writer with UTF-8
+     * encoding.
+     * @param windowWidth the number of text columns to start with
+     * @param windowHeight the number of text rows to start with
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
      */
-    public PrintWriter getOutput() {
-        return output;
+    public ECMA48Terminal(final Object listener, final InputStream input,
+        final OutputStream output, final int windowWidth,
+        final int windowHeight) throws UnsupportedEncodingException {
+
+        this(listener, input, output);
+
+        // Send dtterm/xterm sequences, which will probably not work because
+        // allowWindowOps is defaulted to false.
+        String resizeString = String.format("\033[8;%d;%dt", windowHeight,
+            windowWidth);
+        this.output.write(resizeString);
+        this.output.flush();
     }
+
+    /**
+     * Constructor sets up state for getEvent().
+     *
+     * @param listener the object this backend needs to wake up when new
+     * input comes in
+     * @param input an InputStream connected to the remote user, or null for
+     * System.in.  If System.in is used, then on non-Windows systems it will
+     * be put in raw mode; shutdown() will (blindly!) put System.in in cooked
+     * mode.  input is always converted to a Reader with UTF-8 encoding.
+     * @param output an OutputStream connected to the remote user, or null
+     * for System.out.  output is always converted to a Writer with UTF-8
+     * encoding.
+     * @throws UnsupportedEncodingException if an exception is thrown when
+     * creating the InputStreamReader
+     */
+    public ECMA48Terminal(final Object listener, final InputStream input,
+        final OutputStream output) throws UnsupportedEncodingException {
+
+        resetParser();
+        mouse1           = false;
+        mouse2           = false;
+        mouse3           = false;
+        stopReaderThread = false;
+        this.listener    = listener;
+
+        if (input == null) {
+            // inputStream = System.in;
+            inputStream = new FileInputStream(FileDescriptor.in);
+            sttyRaw();
+            setRawMode = true;
+        } else {
+            inputStream = input;
+        }
+        this.input = new InputStreamReader(inputStream, "UTF-8");
+
+        if (input instanceof SessionInfo) {
+            // This is a TelnetInputStream that exposes window size and
+            // environment variables from the telnet layer.
+            sessionInfo = (SessionInfo) input;
+        }
+        if (sessionInfo == null) {
+            if (input == null) {
+                // Reading right off the tty
+                sessionInfo = new TTYSessionInfo();
+            } else {
+                sessionInfo = new TSessionInfo();
+            }
+        }
+
+        if (output == null) {
+            this.output = new PrintWriter(new OutputStreamWriter(System.out,
+                    "UTF-8"));
+        } else {
+            this.output = new PrintWriter(new OutputStreamWriter(output,
+                    "UTF-8"));
+        }
+
+        // Enable mouse reporting and metaSendsEscape
+        this.output.printf("%s%s", mouse(true), xtermMetaSendsEscape(true));
+        this.output.flush();
+
+        // Query the screen size
+        sessionInfo.queryWindowSize();
+        setDimensions(sessionInfo.getWindowWidth(),
+            sessionInfo.getWindowHeight());
+
+        // Hang onto the window size
+        windowResize = new TResizeEvent(TResizeEvent.Type.SCREEN,
+            sessionInfo.getWindowWidth(), sessionInfo.getWindowHeight());
+
+        // Permit RGB colors only if externally requested
+        if (System.getProperty("jexer.ECMA48.rgbColor") != null) {
+            if (System.getProperty("jexer.ECMA48.rgbColor").equals("true")) {
+                doRgbColor = true;
+            } else {
+                doRgbColor = false;
+            }
+        }
+
+        // Spin up the input reader
+        eventQueue = new LinkedList<TInputEvent>();
+        readerThread = new Thread(this);
+        readerThread.start();
+
+        // Clear the screen
+        this.output.write(clearAll());
+        this.output.flush();
+    }
+
+    /**
+     * Constructor sets up state for getEvent().
+     *
+     * @param listener the object this backend needs to wake up when new
+     * input comes in
+     * @param input the InputStream underlying 'reader'.  Its available()
+     * method is used to determine if reader.read() will block or not.
+     * @param reader a Reader connected to the remote user.
+     * @param writer a PrintWriter connected to the remote user.
+     * @param setRawMode if true, set System.in into raw mode with stty.
+     * This should in general not be used.  It is here solely for Demo3,
+     * which uses System.in.
+     * @throws IllegalArgumentException if input, reader, or writer are null.
+     */
+    public ECMA48Terminal(final Object listener, final InputStream input,
+        final Reader reader, final PrintWriter writer,
+        final boolean setRawMode) {
+
+        if (input == null) {
+            throw new IllegalArgumentException("InputStream must be specified");
+        }
+        if (reader == null) {
+            throw new IllegalArgumentException("Reader must be specified");
+        }
+        if (writer == null) {
+            throw new IllegalArgumentException("Writer must be specified");
+        }
+        resetParser();
+        mouse1           = false;
+        mouse2           = false;
+        mouse3           = false;
+        stopReaderThread = false;
+        this.listener    = listener;
+
+        inputStream = input;
+        this.input = reader;
+
+        if (setRawMode == true) {
+            sttyRaw();
+        }
+        this.setRawMode = setRawMode;
+
+        if (input instanceof SessionInfo) {
+            // This is a TelnetInputStream that exposes window size and
+            // environment variables from the telnet layer.
+            sessionInfo = (SessionInfo) input;
+        }
+        if (sessionInfo == null) {
+            if (setRawMode == true) {
+                // Reading right off the tty
+                sessionInfo = new TTYSessionInfo();
+            } else {
+                sessionInfo = new TSessionInfo();
+            }
+        }
+
+        this.output = writer;
+
+        // Enable mouse reporting and metaSendsEscape
+        this.output.printf("%s%s", mouse(true), xtermMetaSendsEscape(true));
+        this.output.flush();
+
+        // Query the screen size
+        sessionInfo.queryWindowSize();
+        setDimensions(sessionInfo.getWindowWidth(),
+            sessionInfo.getWindowHeight());
+
+        // Hang onto the window size
+        windowResize = new TResizeEvent(TResizeEvent.Type.SCREEN,
+            sessionInfo.getWindowWidth(), sessionInfo.getWindowHeight());
+
+        // Permit RGB colors only if externally requested
+        if (System.getProperty("jexer.ECMA48.rgbColor") != null) {
+            if (System.getProperty("jexer.ECMA48.rgbColor").equals("true")) {
+                doRgbColor = true;
+            } else {
+                doRgbColor = false;
+            }
+        }
+
+        // Spin up the input reader
+        eventQueue = new LinkedList<TInputEvent>();
+        readerThread = new Thread(this);
+        readerThread.start();
+
+        // Clear the screen
+        this.output.write(clearAll());
+        this.output.flush();
+    }
+
+    /**
+     * Constructor sets up state for getEvent().
+     *
+     * @param listener the object this backend needs to wake up when new
+     * input comes in
+     * @param input the InputStream underlying 'reader'.  Its available()
+     * method is used to determine if reader.read() will block or not.
+     * @param reader a Reader connected to the remote user.
+     * @param writer a PrintWriter connected to the remote user.
+     * @throws IllegalArgumentException if input, reader, or writer are null.
+     */
+    public ECMA48Terminal(final Object listener, final InputStream input,
+        final Reader reader, final PrintWriter writer) {
+
+        this(listener, input, reader, writer, false);
+    }
+
+    // ------------------------------------------------------------------------
+    // LogicalScreen ----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Set the window title.
+     *
+     * @param title the new title
+     */
+    @Override
+    public void setTitle(final String title) {
+        output.write(getSetTitleString(title));
+        flush();
+    }
+
+    /**
+     * Push the logical screen to the physical device.
+     */
+    @Override
+    public void flushPhysical() {
+        String result = flushString();
+        if ((cursorVisible)
+            && (cursorY >= 0)
+            && (cursorX >= 0)
+            && (cursorY <= height - 1)
+            && (cursorX <= width - 1)
+        ) {
+            result += cursor(true);
+            result += gotoXY(cursorX, cursorY);
+        } else {
+            result += cursor(false);
+        }
+        output.write(result);
+        flush();
+    }
+
+    // ------------------------------------------------------------------------
+    // TerminalReader ---------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Check if there are events in the queue.
@@ -208,6 +474,189 @@ public final class ECMA48Terminal implements Runnable {
         synchronized (eventQueue) {
             return (eventQueue.size() > 0);
         }
+    }
+
+    /**
+     * Return any events in the IO queue.
+     *
+     * @param queue list to append new events to
+     */
+    public void getEvents(final List<TInputEvent> queue) {
+        synchronized (eventQueue) {
+            if (eventQueue.size() > 0) {
+                synchronized (queue) {
+                    queue.addAll(eventQueue);
+                }
+                eventQueue.clear();
+            }
+        }
+    }
+
+    /**
+     * Restore terminal to normal state.
+     */
+    public void closeTerminal() {
+
+        // System.err.println("=== shutdown() ==="); System.err.flush();
+
+        // Tell the reader thread to stop looking at input
+        stopReaderThread = true;
+        try {
+            readerThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Disable mouse reporting and show cursor.  Defensive null check
+        // here in case closeTerminal() is called twice.
+        if (output != null) {
+            output.printf("%s%s%s", mouse(false), cursor(true), normal());
+            output.flush();
+        }
+
+        if (setRawMode) {
+            sttyCooked();
+            setRawMode = false;
+            // We don't close System.in/out
+        } else {
+            // Shut down the streams, this should wake up the reader thread
+            // and make it exit.
+            try {
+                if (input != null) {
+                    input.close();
+                    input = null;
+                }
+                if (output != null) {
+                    output.close();
+                    output = null;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    /**
+     * Set listener to a different Object.
+     *
+     * @param listener the new listening object that run() wakes up on new
+     * input
+     */
+    public void setListener(final Object listener) {
+        this.listener = listener;
+    }
+
+    // ------------------------------------------------------------------------
+    // Runnable ---------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Read function runs on a separate thread.
+     */
+    public void run() {
+        boolean done = false;
+        // available() will often return > 1, so we need to read in chunks to
+        // stay caught up.
+        char [] readBuffer = new char[128];
+        List<TInputEvent> events = new LinkedList<TInputEvent>();
+
+        while (!done && !stopReaderThread) {
+            try {
+                // We assume that if inputStream has bytes available, then
+                // input won't block on read().
+                int n = inputStream.available();
+
+                /*
+                System.err.printf("inputStream.available(): %d\n", n);
+                System.err.flush();
+                */
+
+                if (n > 0) {
+                    if (readBuffer.length < n) {
+                        // The buffer wasn't big enough, make it huger
+                        readBuffer = new char[readBuffer.length * 2];
+                    }
+
+                    // System.err.printf("BEFORE read()\n"); System.err.flush();
+
+                    int rc = input.read(readBuffer, 0, readBuffer.length);
+
+                    /*
+                    System.err.printf("AFTER read() %d\n", rc);
+                    System.err.flush();
+                    */
+
+                    if (rc == -1) {
+                        // This is EOF
+                        done = true;
+                    } else {
+                        for (int i = 0; i < rc; i++) {
+                            int ch = readBuffer[i];
+                            processChar(events, (char)ch);
+                        }
+                        getIdleEvents(events);
+                        if (events.size() > 0) {
+                            // Add to the queue for the backend thread to
+                            // be able to obtain.
+                            synchronized (eventQueue) {
+                                eventQueue.addAll(events);
+                            }
+                            if (listener != null) {
+                                synchronized (listener) {
+                                    listener.notifyAll();
+                                }
+                            }
+                            events.clear();
+                        }
+                    }
+                } else {
+                    getIdleEvents(events);
+                    if (events.size() > 0) {
+                        synchronized (eventQueue) {
+                            eventQueue.addAll(events);
+                        }
+                        if (listener != null) {
+                            synchronized (listener) {
+                                listener.notifyAll();
+                            }
+                        }
+                        events.clear();
+                    }
+
+                    // Wait 20 millis for more data
+                    Thread.sleep(20);
+                }
+                // System.err.println("end while loop"); System.err.flush();
+            } catch (InterruptedException e) {
+                // SQUASH
+            } catch (IOException e) {
+                e.printStackTrace();
+                done = true;
+            }
+        } // while ((done == false) && (stopReaderThread == false))
+        // System.err.println("*** run() exiting..."); System.err.flush();
+    }
+
+    // ------------------------------------------------------------------------
+    // ECMA48Terminal ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Getter for sessionInfo.
+     *
+     * @return the SessionInfo
+     */
+    public SessionInfo getSessionInfo() {
+        return sessionInfo;
+    }
+
+    /**
+     * Get the output writer.
+     *
+     * @return the Writer
+     */
+    public PrintWriter getOutput() {
+        return output;
     }
 
     /**
@@ -277,221 +726,6 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
-     * Constructor sets up state for getEvent().
-     *
-     * @param listener the object this backend needs to wake up when new
-     * input comes in
-     * @param input an InputStream connected to the remote user, or null for
-     * System.in.  If System.in is used, then on non-Windows systems it will
-     * be put in raw mode; shutdown() will (blindly!) put System.in in cooked
-     * mode.  input is always converted to a Reader with UTF-8 encoding.
-     * @param output an OutputStream connected to the remote user, or null
-     * for System.out.  output is always converted to a Writer with UTF-8
-     * encoding.
-     * @throws UnsupportedEncodingException if an exception is thrown when
-     * creating the InputStreamReader
-     */
-    public ECMA48Terminal(final Object listener, final InputStream input,
-        final OutputStream output) throws UnsupportedEncodingException {
-
-        reset();
-        mouse1           = false;
-        mouse2           = false;
-        mouse3           = false;
-        stopReaderThread = false;
-        this.listener    = listener;
-
-        if (input == null) {
-            // inputStream = System.in;
-            inputStream = new FileInputStream(FileDescriptor.in);
-            sttyRaw();
-            setRawMode = true;
-        } else {
-            inputStream = input;
-        }
-        this.input = new InputStreamReader(inputStream, "UTF-8");
-
-        if (input instanceof SessionInfo) {
-            // This is a TelnetInputStream that exposes window size and
-            // environment variables from the telnet layer.
-            sessionInfo = (SessionInfo) input;
-        }
-        if (sessionInfo == null) {
-            if (input == null) {
-                // Reading right off the tty
-                sessionInfo = new TTYSessionInfo();
-            } else {
-                sessionInfo = new TSessionInfo();
-            }
-        }
-
-        if (output == null) {
-            this.output = new PrintWriter(new OutputStreamWriter(System.out,
-                    "UTF-8"));
-        } else {
-            this.output = new PrintWriter(new OutputStreamWriter(output,
-                    "UTF-8"));
-        }
-
-        // Enable mouse reporting and metaSendsEscape
-        this.output.printf("%s%s", mouse(true), xtermMetaSendsEscape(true));
-        this.output.flush();
-
-        // Hang onto the window size
-        windowResize = new TResizeEvent(TResizeEvent.Type.SCREEN,
-            sessionInfo.getWindowWidth(), sessionInfo.getWindowHeight());
-
-        // Permit RGB colors only if externally requested
-        if (System.getProperty("jexer.ECMA48.rgbColor") != null) {
-            if (System.getProperty("jexer.ECMA48.rgbColor").equals("true")) {
-                doRgbColor = true;
-            }
-        }
-
-        // Spin up the input reader
-        eventQueue = new LinkedList<TInputEvent>();
-        readerThread = new Thread(this);
-        readerThread.start();
-    }
-
-    /**
-     * Constructor sets up state for getEvent().
-     *
-     * @param listener the object this backend needs to wake up when new
-     * input comes in
-     * @param input the InputStream underlying 'reader'.  Its available()
-     * method is used to determine if reader.read() will block or not.
-     * @param reader a Reader connected to the remote user.
-     * @param writer a PrintWriter connected to the remote user.
-     * @param setRawMode if true, set System.in into raw mode with stty.
-     * This should in general not be used.  It is here solely for Demo3,
-     * which uses System.in.
-     * @throws IllegalArgumentException if input, reader, or writer are null.
-     */
-    public ECMA48Terminal(final Object listener, final InputStream input,
-        final Reader reader, final PrintWriter writer,
-        final boolean setRawMode) {
-
-        if (input == null) {
-            throw new IllegalArgumentException("InputStream must be specified");
-        }
-        if (reader == null) {
-            throw new IllegalArgumentException("Reader must be specified");
-        }
-        if (writer == null) {
-            throw new IllegalArgumentException("Writer must be specified");
-        }
-        reset();
-        mouse1           = false;
-        mouse2           = false;
-        mouse3           = false;
-        stopReaderThread = false;
-        this.listener    = listener;
-
-        inputStream = input;
-        this.input = reader;
-
-        if (setRawMode == true) {
-            sttyRaw();
-        }
-        this.setRawMode = setRawMode;
-
-        if (input instanceof SessionInfo) {
-            // This is a TelnetInputStream that exposes window size and
-            // environment variables from the telnet layer.
-            sessionInfo = (SessionInfo) input;
-        }
-        if (sessionInfo == null) {
-            if (setRawMode == true) {
-                // Reading right off the tty
-                sessionInfo = new TTYSessionInfo();
-            } else {
-                sessionInfo = new TSessionInfo();
-            }
-        }
-
-        this.output = writer;
-
-        // Enable mouse reporting and metaSendsEscape
-        this.output.printf("%s%s", mouse(true), xtermMetaSendsEscape(true));
-        this.output.flush();
-
-        // Hang onto the window size
-        windowResize = new TResizeEvent(TResizeEvent.Type.SCREEN,
-            sessionInfo.getWindowWidth(), sessionInfo.getWindowHeight());
-
-        // Permit RGB colors only if externally requested
-        if (System.getProperty("jexer.ECMA48.rgbColor") != null) {
-            if (System.getProperty("jexer.ECMA48.rgbColor").equals("true")) {
-                doRgbColor = true;
-            }
-        }
-
-        // Spin up the input reader
-        eventQueue = new LinkedList<TInputEvent>();
-        readerThread = new Thread(this);
-        readerThread.start();
-    }
-
-    /**
-     * Constructor sets up state for getEvent().
-     *
-     * @param listener the object this backend needs to wake up when new
-     * input comes in
-     * @param input the InputStream underlying 'reader'.  Its available()
-     * method is used to determine if reader.read() will block or not.
-     * @param reader a Reader connected to the remote user.
-     * @param writer a PrintWriter connected to the remote user.
-     * @throws IllegalArgumentException if input, reader, or writer are null.
-     */
-    public ECMA48Terminal(final Object listener, final InputStream input,
-        final Reader reader, final PrintWriter writer) {
-
-        this(listener, input, reader, writer, false);
-    }
-
-    /**
-     * Restore terminal to normal state.
-     */
-    public void shutdown() {
-
-        // System.err.println("=== shutdown() ==="); System.err.flush();
-
-        // Tell the reader thread to stop looking at input
-        stopReaderThread = true;
-        try {
-            readerThread.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        // Disable mouse reporting and show cursor
-        output.printf("%s%s%s", mouse(false), cursor(true), normal());
-        output.flush();
-
-        if (setRawMode) {
-            sttyCooked();
-            setRawMode = false;
-            // We don't close System.in/out
-        } else {
-            // Shut down the streams, this should wake up the reader thread
-            // and make it exit.
-            try {
-                if (input != null) {
-                    input.close();
-                    input = null;
-                }
-                if (output != null) {
-                    output.close();
-                    output = null;
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    /**
      * Flush output.
      */
     public void flush() {
@@ -499,9 +733,272 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
+     * Perform a somewhat-optimal rendering of a line.
+     *
+     * @param y row coordinate.  0 is the top-most row.
+     * @param sb StringBuilder to write escape sequences to
+     * @param lastAttr cell attributes from the last call to flushLine
+     */
+    private void flushLine(final int y, final StringBuilder sb,
+        CellAttributes lastAttr) {
+
+        int lastX = -1;
+        int textEnd = 0;
+        for (int x = 0; x < width; x++) {
+            Cell lCell = logical[x][y];
+            if (!lCell.isBlank()) {
+                textEnd = x;
+            }
+        }
+        // Push textEnd to first column beyond the text area
+        textEnd++;
+
+        // DEBUG
+        // reallyCleared = true;
+
+        for (int x = 0; x < width; x++) {
+            Cell lCell = logical[x][y];
+            Cell pCell = physical[x][y];
+
+            if (!lCell.equals(pCell) || reallyCleared) {
+
+                if (debugToStderr) {
+                    System.err.printf("\n--\n");
+                    System.err.printf(" Y: %d X: %d\n", y, x);
+                    System.err.printf("   lCell: %s\n", lCell);
+                    System.err.printf("   pCell: %s\n", pCell);
+                    System.err.printf("    ====    \n");
+                }
+
+                if (lastAttr == null) {
+                    lastAttr = new CellAttributes();
+                    sb.append(normal());
+                }
+
+                // Place the cell
+                if ((lastX != (x - 1)) || (lastX == -1)) {
+                    // Advancing at least one cell, or the first gotoXY
+                    sb.append(gotoXY(x, y));
+                }
+
+                assert (lastAttr != null);
+
+                if ((x == textEnd) && (textEnd < width - 1)) {
+                    assert (lCell.isBlank());
+
+                    for (int i = x; i < width; i++) {
+                        assert (logical[i][y].isBlank());
+                        // Physical is always updated
+                        physical[i][y].reset();
+                    }
+
+                    // Clear remaining line
+                    sb.append(clearRemainingLine());
+                    lastAttr.reset();
+                    return;
+                }
+
+                // Now emit only the modified attributes
+                if ((lCell.getForeColor() != lastAttr.getForeColor())
+                    && (lCell.getBackColor() != lastAttr.getBackColor())
+                    && (!lCell.isRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+                    // Both colors changed, attributes the same
+                    sb.append(color(lCell.isBold(),
+                            lCell.getForeColor(), lCell.getBackColor()));
+
+                    if (debugToStderr) {
+                        System.err.printf("1 Change only fore/back colors\n");
+                    }
+
+                } else if (lCell.isRGB()
+                    && (lCell.getForeColorRGB() != lastAttr.getForeColorRGB())
+                    && (lCell.getBackColorRGB() != lastAttr.getBackColorRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+                    // Both colors changed, attributes the same
+                    sb.append(colorRGB(lCell.getForeColorRGB(),
+                            lCell.getBackColorRGB()));
+
+                    if (debugToStderr) {
+                        System.err.printf("1 Change only fore/back colors (RGB)\n");
+                    }
+                } else if ((lCell.getForeColor() != lastAttr.getForeColor())
+                    && (lCell.getBackColor() != lastAttr.getBackColor())
+                    && (!lCell.isRGB())
+                    && (lCell.isBold() != lastAttr.isBold())
+                    && (lCell.isReverse() != lastAttr.isReverse())
+                    && (lCell.isUnderline() != lastAttr.isUnderline())
+                    && (lCell.isBlink() != lastAttr.isBlink())
+                ) {
+                    // Everything is different
+                    sb.append(color(lCell.getForeColor(),
+                            lCell.getBackColor(),
+                            lCell.isBold(), lCell.isReverse(),
+                            lCell.isBlink(),
+                            lCell.isUnderline()));
+
+                    if (debugToStderr) {
+                        System.err.printf("2 Set all attributes\n");
+                    }
+                } else if ((lCell.getForeColor() != lastAttr.getForeColor())
+                    && (lCell.getBackColor() == lastAttr.getBackColor())
+                    && (!lCell.isRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+
+                    // Attributes same, foreColor different
+                    sb.append(color(lCell.isBold(),
+                            lCell.getForeColor(), true));
+
+                    if (debugToStderr) {
+                        System.err.printf("3 Change foreColor\n");
+                    }
+                } else if (lCell.isRGB()
+                    && (lCell.getForeColorRGB() != lastAttr.getForeColorRGB())
+                    && (lCell.getBackColorRGB() == lastAttr.getBackColorRGB())
+                    && (lCell.getForeColorRGB() >= 0)
+                    && (lCell.getBackColorRGB() >= 0)
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+                    // Attributes same, foreColor different
+                    sb.append(colorRGB(lCell.getForeColorRGB(), true));
+
+                    if (debugToStderr) {
+                        System.err.printf("3 Change foreColor (RGB)\n");
+                    }
+                } else if ((lCell.getForeColor() == lastAttr.getForeColor())
+                    && (lCell.getBackColor() != lastAttr.getBackColor())
+                    && (!lCell.isRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+                    // Attributes same, backColor different
+                    sb.append(color(lCell.isBold(),
+                            lCell.getBackColor(), false));
+
+                    if (debugToStderr) {
+                        System.err.printf("4 Change backColor\n");
+                    }
+                } else if (lCell.isRGB()
+                    && (lCell.getForeColorRGB() == lastAttr.getForeColorRGB())
+                    && (lCell.getBackColorRGB() != lastAttr.getBackColorRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+                    // Attributes same, foreColor different
+                    sb.append(colorRGB(lCell.getBackColorRGB(), false));
+
+                    if (debugToStderr) {
+                        System.err.printf("4 Change backColor (RGB)\n");
+                    }
+                } else if ((lCell.getForeColor() == lastAttr.getForeColor())
+                    && (lCell.getBackColor() == lastAttr.getBackColor())
+                    && (lCell.getForeColorRGB() == lastAttr.getForeColorRGB())
+                    && (lCell.getBackColorRGB() == lastAttr.getBackColorRGB())
+                    && (lCell.isBold() == lastAttr.isBold())
+                    && (lCell.isReverse() == lastAttr.isReverse())
+                    && (lCell.isUnderline() == lastAttr.isUnderline())
+                    && (lCell.isBlink() == lastAttr.isBlink())
+                ) {
+
+                    // All attributes the same, just print the char
+                    // NOP
+
+                    if (debugToStderr) {
+                        System.err.printf("5 Only emit character\n");
+                    }
+                } else {
+                    // Just reset everything again
+                    if (!lCell.isRGB()) {
+                        sb.append(color(lCell.getForeColor(),
+                                lCell.getBackColor(),
+                                lCell.isBold(),
+                                lCell.isReverse(),
+                                lCell.isBlink(),
+                                lCell.isUnderline()));
+
+                        if (debugToStderr) {
+                            System.err.printf("6 Change all attributes\n");
+                        }
+                    } else {
+                        sb.append(colorRGB(lCell.getForeColorRGB(),
+                                lCell.getBackColorRGB(),
+                                lCell.isBold(),
+                                lCell.isReverse(),
+                                lCell.isBlink(),
+                                lCell.isUnderline()));
+                        if (debugToStderr) {
+                            System.err.printf("6 Change all attributes (RGB)\n");
+                        }
+                    }
+
+                }
+                // Emit the character
+                sb.append(lCell.getChar());
+
+                // Save the last rendered cell
+                lastX = x;
+                lastAttr.setTo(lCell);
+
+                // Physical is always updated
+                physical[x][y].setTo(lCell);
+
+            } // if (!lCell.equals(pCell) || (reallyCleared == true))
+
+        } // for (int x = 0; x < width; x++)
+    }
+
+    /**
+     * Render the screen to a string that can be emitted to something that
+     * knows how to process ECMA-48/ANSI X3.64 escape sequences.
+     *
+     * @return escape sequences string that provides the updates to the
+     * physical screen
+     */
+    private String flushString() {
+        CellAttributes attr = null;
+
+        StringBuilder sb = new StringBuilder();
+        if (reallyCleared) {
+            attr = new CellAttributes();
+            sb.append(clearAll());
+        }
+
+        for (int y = 0; y < height; y++) {
+            flushLine(y, sb, attr);
+        }
+
+        reallyCleared = false;
+
+        String result = sb.toString();
+        if (debugToStderr) {
+            System.err.printf("flushString(): %s\n", result);
+        }
+        return result;
+    }
+
+    /**
      * Reset keyboard/mouse input parser.
      */
-    private void reset() {
+    private void resetParser() {
         state = ParseState.GROUND;
         params = new ArrayList<String>();
         params.clear();
@@ -813,54 +1310,47 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
-     * Return any events in the IO queue.
-     *
-     * @param queue list to append new events to
-     */
-    public void getEvents(final List<TInputEvent> queue) {
-        synchronized (eventQueue) {
-            if (eventQueue.size() > 0) {
-                synchronized (queue) {
-                    queue.addAll(eventQueue);
-                }
-                eventQueue.clear();
-            }
-        }
-    }
-
-    /**
      * Return any events in the IO queue due to timeout.
      *
      * @param queue list to append new events to
      */
     private void getIdleEvents(final List<TInputEvent> queue) {
-        Date now = new Date();
+        long nowTime = System.currentTimeMillis();
 
         // Check for new window size
-        long windowSizeDelay = now.getTime() - windowSizeTime;
+        long windowSizeDelay = nowTime - windowSizeTime;
         if (windowSizeDelay > 1000) {
             sessionInfo.queryWindowSize();
             int newWidth = sessionInfo.getWindowWidth();
             int newHeight = sessionInfo.getWindowHeight();
+
             if ((newWidth != windowResize.getWidth())
                 || (newHeight != windowResize.getHeight())
             ) {
+
+                if (debugToStderr) {
+                    System.err.println("Screen size changed, old size " +
+                        windowResize);
+                    System.err.println("                     new size " +
+                        newWidth + " x " + newHeight);
+                }
+
                 TResizeEvent event = new TResizeEvent(TResizeEvent.Type.SCREEN,
                     newWidth, newHeight);
                 windowResize = new TResizeEvent(TResizeEvent.Type.SCREEN,
                     newWidth, newHeight);
                 queue.add(event);
             }
-            windowSizeTime = now.getTime();
+            windowSizeTime = nowTime;
         }
 
         // ESCDELAY type timeout
         if (state == ParseState.ESCAPE) {
-            long escDelay = now.getTime() - escapeTime;
+            long escDelay = nowTime - escapeTime;
             if (escDelay > 100) {
                 // After 0.1 seconds, assume a true escape character
                 queue.add(controlChar((char)0x1B, false));
-                reset();
+                resetParser();
             }
         }
     }
@@ -920,13 +1410,13 @@ public final class ECMA48Terminal implements Runnable {
     private void processChar(final List<TInputEvent> events, final char ch) {
 
         // ESCDELAY type timeout
-        Date now = new Date();
+        long nowTime = System.currentTimeMillis();
         if (state == ParseState.ESCAPE) {
-            long escDelay = now.getTime() - escapeTime;
+            long escDelay = nowTime - escapeTime;
             if (escDelay > 250) {
                 // After 0.25 seconds, assume a true escape character
                 events.add(controlChar((char)0x1B, false));
-                reset();
+                resetParser();
             }
         }
 
@@ -942,14 +1432,14 @@ public final class ECMA48Terminal implements Runnable {
 
             if (ch == 0x1B) {
                 state = ParseState.ESCAPE;
-                escapeTime = now.getTime();
+                escapeTime = nowTime;
                 return;
             }
 
             if (ch <= 0x1F) {
                 // Control character
                 events.add(controlChar(ch, false));
-                reset();
+                resetParser();
                 return;
             }
 
@@ -957,7 +1447,7 @@ public final class ECMA48Terminal implements Runnable {
                 // Normal character
                 events.add(new TKeypressEvent(false, 0, ch,
                         false, false, false));
-                reset();
+                resetParser();
                 return;
             }
 
@@ -967,7 +1457,7 @@ public final class ECMA48Terminal implements Runnable {
             if (ch <= 0x1F) {
                 // ALT-Control character
                 events.add(controlChar(ch, true));
-                reset();
+                resetParser();
                 return;
             }
 
@@ -989,7 +1479,7 @@ public final class ECMA48Terminal implements Runnable {
             }
             alt = true;
             events.add(new TKeypressEvent(false, 0, ch, alt, ctrl, shift));
-            reset();
+            resetParser();
             return;
 
         case ESCAPE_INTERMEDIATE:
@@ -1011,12 +1501,12 @@ public final class ECMA48Terminal implements Runnable {
                 default:
                     break;
                 }
-                reset();
+                resetParser();
                 return;
             }
 
             // Unknown keystroke, ignore
-            reset();
+            resetParser();
             return;
 
         case CSI_ENTRY:
@@ -1038,37 +1528,37 @@ public final class ECMA48Terminal implements Runnable {
                 case 'A':
                     // Up
                     events.add(new TKeypressEvent(kbUp, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'B':
                     // Down
                     events.add(new TKeypressEvent(kbDown, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'C':
                     // Right
                     events.add(new TKeypressEvent(kbRight, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'D':
                     // Left
                     events.add(new TKeypressEvent(kbLeft, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'H':
                     // Home
                     events.add(new TKeypressEvent(kbHome));
-                    reset();
+                    resetParser();
                     return;
                 case 'F':
                     // End
                     events.add(new TKeypressEvent(kbEnd));
-                    reset();
+                    resetParser();
                     return;
                 case 'Z':
                     // CBT - Cursor backward X tab stops (default 1)
                     events.add(new TKeypressEvent(kbBackTab));
-                    reset();
+                    resetParser();
                     return;
                 case 'M':
                     // Mouse position
@@ -1084,7 +1574,7 @@ public final class ECMA48Terminal implements Runnable {
             }
 
             // Unknown keystroke, ignore
-            reset();
+            resetParser();
             return;
 
         case MOUSE_SGR:
@@ -1107,7 +1597,7 @@ public final class ECMA48Terminal implements Runnable {
                 if (event != null) {
                     events.add(event);
                 }
-                reset();
+                resetParser();
                 return;
             case 'm':
                 // Generate a mouse release event
@@ -1115,14 +1605,14 @@ public final class ECMA48Terminal implements Runnable {
                 if (event != null) {
                     events.add(event);
                 }
-                reset();
+                resetParser();
                 return;
             default:
                 break;
             }
 
             // Unknown keystroke, ignore
-            reset();
+            resetParser();
             return;
 
         case CSI_PARAM:
@@ -1141,7 +1631,7 @@ public final class ECMA48Terminal implements Runnable {
 
             if (ch == '~') {
                 events.add(csiFnKey());
-                reset();
+                resetParser();
                 return;
             }
 
@@ -1155,7 +1645,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbUp, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'B':
                     // Down
@@ -1165,7 +1655,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbDown, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'C':
                     // Right
@@ -1175,7 +1665,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbRight, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'D':
                     // Left
@@ -1185,7 +1675,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbLeft, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'H':
                     // Home
@@ -1195,7 +1685,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbHome, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 case 'F':
                     // End
@@ -1205,7 +1695,7 @@ public final class ECMA48Terminal implements Runnable {
                         ctrl = csiIsCtrl(params.get(1));
                     }
                     events.add(new TKeypressEvent(kbEnd, alt, ctrl, shift));
-                    reset();
+                    resetParser();
                     return;
                 default:
                     break;
@@ -1213,7 +1703,7 @@ public final class ECMA48Terminal implements Runnable {
             }
 
             // Unknown keystroke, ignore
-            reset();
+            resetParser();
             return;
 
         case MOUSE:
@@ -1221,7 +1711,7 @@ public final class ECMA48Terminal implements Runnable {
             if (params.get(0).length() == 3) {
                 // We have enough to generate a mouse event
                 events.add(parseMouse());
-                reset();
+                resetParser();
             }
             return;
 
@@ -1249,19 +1739,17 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
-     * Create an xterm OSC sequence to change the window title.  Note package
-     * private access.
+     * Create an xterm OSC sequence to change the window title.
      *
      * @param title the new title
      * @return the string to emit to xterm
      */
-    String setTitle(final String title) {
+    private String getSetTitleString(final String title) {
         return "\033]2;" + title + "\007";
     }
 
     /**
-     * Create a SGR parameter sequence for a single color change.  Note
-     * package private access.
+     * Create a SGR parameter sequence for a single color change.
      *
      * @param bold if true, set bold
      * @param color one of the Color.WHITE, Color.BLUE, etc. constants
@@ -1269,10 +1757,59 @@ public final class ECMA48Terminal implements Runnable {
      * @return the string to emit to an ANSI / ECMA-style terminal,
      * e.g. "\033[42m"
      */
-    String color(final boolean bold, final Color color,
+    private String color(final boolean bold, final Color color,
         final boolean foreground) {
         return color(color, foreground, true) +
                 rgbColor(bold, color, foreground);
+    }
+
+    /**
+     * Create a T.416 RGB parameter sequence for a single color change.
+     *
+     * @param colorRGB a 24-bit RGB value for foreground color
+     * @param foreground if true, this is a foreground color
+     * @return the string to emit to an ANSI / ECMA-style terminal,
+     * e.g. "\033[42m"
+     */
+    private String colorRGB(final int colorRGB, final boolean foreground) {
+
+        int colorRed     = (colorRGB >> 16) & 0xFF;
+        int colorGreen   = (colorRGB >>  8) & 0xFF;
+        int colorBlue    =  colorRGB        & 0xFF;
+
+        StringBuilder sb = new StringBuilder();
+        if (foreground) {
+            sb.append("\033[38;2;");
+        } else {
+            sb.append("\033[48;2;");
+        }
+        sb.append(String.format("%d;%d;%dm", colorRed, colorGreen, colorBlue));
+        return sb.toString();
+    }
+
+    /**
+     * Create a T.416 RGB parameter sequence for both foreground and
+     * background color change.
+     *
+     * @param foreColorRGB a 24-bit RGB value for foreground color
+     * @param backColorRGB a 24-bit RGB value for foreground color
+     * @return the string to emit to an ANSI / ECMA-style terminal,
+     * e.g. "\033[42m"
+     */
+    private String colorRGB(final int foreColorRGB, final int backColorRGB) {
+        int foreColorRed     = (foreColorRGB >> 16) & 0xFF;
+        int foreColorGreen   = (foreColorRGB >>  8) & 0xFF;
+        int foreColorBlue    =  foreColorRGB        & 0xFF;
+        int backColorRed     = (backColorRGB >> 16) & 0xFF;
+        int backColorGreen   = (backColorRGB >>  8) & 0xFF;
+        int backColorBlue    =  backColorRGB        & 0xFF;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("\033[38;2;%d;%d;%dm",
+                foreColorRed, foreColorGreen, foreColorBlue));
+        sb.append(String.format("\033[48;2;%d;%d;%dm",
+                backColorRed, backColorGreen, backColorBlue));
+        return sb.toString();
     }
 
     /**
@@ -1389,7 +1926,7 @@ public final class ECMA48Terminal implements Runnable {
 
     /**
      * Create a SGR parameter sequence for both foreground and background
-     * color change.  Note package private access.
+     * color change.
      *
      * @param bold if true, set bold
      * @param foreColor one of the Color.WHITE, Color.BLUE, etc. constants
@@ -1397,7 +1934,7 @@ public final class ECMA48Terminal implements Runnable {
      * @return the string to emit to an ANSI / ECMA-style terminal,
      * e.g. "\033[31;42m"
      */
-    String color(final boolean bold, final Color foreColor,
+    private String color(final boolean bold, final Color foreColor,
         final Color backColor) {
         return color(foreColor, backColor, true) +
                 rgbColor(bold, foreColor, backColor);
@@ -1434,8 +1971,7 @@ public final class ECMA48Terminal implements Runnable {
     /**
      * Create a SGR parameter sequence for foreground, background, and
      * several attributes.  This sequence first resets all attributes to
-     * default, then sets attributes as per the parameters.  Note package
-     * private access.
+     * default, then sets attributes as per the parameters.
      *
      * @param foreColor one of the Color.WHITE, Color.BLUE, etc. constants
      * @param backColor one of the Color.WHITE, Color.BLUE, etc. constants
@@ -1446,7 +1982,7 @@ public final class ECMA48Terminal implements Runnable {
      * @return the string to emit to an ANSI / ECMA-style terminal,
      * e.g. "\033[0;1;31;42m"
      */
-    String color(final Color foreColor, final Color backColor,
+    private String color(final Color foreColor, final Color backColor,
         final boolean bold, final boolean reverse, final boolean blink,
         final boolean underline) {
 
@@ -1498,13 +2034,83 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
-     * Create a SGR parameter sequence to reset to defaults.  Note package
-     * private access.
+     * Create a SGR parameter sequence for foreground, background, and
+     * several attributes.  This sequence first resets all attributes to
+     * default, then sets attributes as per the parameters.
+     *
+     * @param foreColorRGB a 24-bit RGB value for foreground color
+     * @param backColorRGB a 24-bit RGB value for foreground color
+     * @param bold if true, set bold
+     * @param reverse if true, set reverse
+     * @param blink if true, set blink
+     * @param underline if true, set underline
+     * @return the string to emit to an ANSI / ECMA-style terminal,
+     * e.g. "\033[0;1;31;42m"
+     */
+    private String colorRGB(final int foreColorRGB, final int backColorRGB,
+        final boolean bold, final boolean reverse, final boolean blink,
+        final boolean underline) {
+
+        int foreColorRed     = (foreColorRGB >> 16) & 0xFF;
+        int foreColorGreen   = (foreColorRGB >>  8) & 0xFF;
+        int foreColorBlue    =  foreColorRGB        & 0xFF;
+        int backColorRed     = (backColorRGB >> 16) & 0xFF;
+        int backColorGreen   = (backColorRGB >>  8) & 0xFF;
+        int backColorBlue    =  backColorRGB        & 0xFF;
+
+        StringBuilder sb = new StringBuilder();
+        if        (  bold &&  reverse &&  blink && !underline ) {
+            sb.append("\033[0;1;7;5;");
+        } else if (  bold &&  reverse && !blink && !underline ) {
+            sb.append("\033[0;1;7;");
+        } else if ( !bold &&  reverse &&  blink && !underline ) {
+            sb.append("\033[0;7;5;");
+        } else if (  bold && !reverse &&  blink && !underline ) {
+            sb.append("\033[0;1;5;");
+        } else if (  bold && !reverse && !blink && !underline ) {
+            sb.append("\033[0;1;");
+        } else if ( !bold &&  reverse && !blink && !underline ) {
+            sb.append("\033[0;7;");
+        } else if ( !bold && !reverse &&  blink && !underline) {
+            sb.append("\033[0;5;");
+        } else if (  bold &&  reverse &&  blink &&  underline ) {
+            sb.append("\033[0;1;7;5;4;");
+        } else if (  bold &&  reverse && !blink &&  underline ) {
+            sb.append("\033[0;1;7;4;");
+        } else if ( !bold &&  reverse &&  blink &&  underline ) {
+            sb.append("\033[0;7;5;4;");
+        } else if (  bold && !reverse &&  blink &&  underline ) {
+            sb.append("\033[0;1;5;4;");
+        } else if (  bold && !reverse && !blink &&  underline ) {
+            sb.append("\033[0;1;4;");
+        } else if ( !bold &&  reverse && !blink &&  underline ) {
+            sb.append("\033[0;7;4;");
+        } else if ( !bold && !reverse &&  blink &&  underline) {
+            sb.append("\033[0;5;4;");
+        } else if ( !bold && !reverse && !blink &&  underline) {
+            sb.append("\033[0;4;");
+        } else {
+            assert (!bold && !reverse && !blink && !underline);
+            sb.append("\033[0;");
+        }
+
+        sb.append("m\033[38;2;");
+        sb.append(String.format("%d;%d;%d", foreColorRed, foreColorGreen,
+                foreColorBlue));
+        sb.append("m\033[48;2;");
+        sb.append(String.format("%d;%d;%d", backColorRed, backColorGreen,
+                backColorBlue));
+        sb.append("m");
+        return sb.toString();
+    }
+
+    /**
+     * Create a SGR parameter sequence to reset to defaults.
      *
      * @return the string to emit to an ANSI / ECMA-style terminal,
      * e.g. "\033[0m"
      */
-    String normal() {
+    private String normal() {
         return normal(true) + rgbColor(false, Color.WHITE, Color.BLACK);
     }
 
@@ -1524,13 +2130,12 @@ public final class ECMA48Terminal implements Runnable {
     }
 
     /**
-     * Create a SGR parameter sequence for enabling the visible cursor.  Note
-     * package private access.
+     * Create a SGR parameter sequence for enabling the visible cursor.
      *
      * @param on if true, turn on cursor
      * @return the string to emit to an ANSI / ECMA-style terminal
      */
-    String cursor(final boolean on) {
+    private String cursor(final boolean on) {
         if (on && !cursorOn) {
             cursorOn = true;
             return "\033[?25h";
@@ -1548,29 +2153,29 @@ public final class ECMA48Terminal implements Runnable {
      *
      * @return the string to emit to an ANSI / ECMA-style terminal
      */
-    public String clearAll() {
+    private String clearAll() {
         return "\033[0;37;40m\033[2J";
     }
 
     /**
      * Clear the line from the cursor (inclusive) to the end of the screen.
      * Because some terminals use back-color-erase, set the color to
-     * white-on-black beforehand.  Note package private access.
+     * white-on-black beforehand.
      *
      * @return the string to emit to an ANSI / ECMA-style terminal
      */
-    String clearRemainingLine() {
+    private String clearRemainingLine() {
         return "\033[0;37;40m\033[K";
     }
 
     /**
-     * Move the cursor to (x, y).  Note package private access.
+     * Move the cursor to (x, y).
      *
      * @param x column coordinate.  0 is the left-most column.
      * @param y row coordinate.  0 is the top-most row.
      * @return the string to emit to an ANSI / ECMA-style terminal
      */
-    String gotoXY(final int x, final int y) {
+    private String gotoXY(final int x, final int y) {
         return String.format("\033[%d;%dH", y + 1, x + 1);
     }
 
@@ -1593,76 +2198,6 @@ public final class ECMA48Terminal implements Runnable {
             return "\033[?1002;1003;1005;1006h\033[?1049h";
         }
         return "\033[?1002;1003;1006;1005l\033[?1049l";
-    }
-
-    /**
-     * Read function runs on a separate thread.
-     */
-    public void run() {
-        boolean done = false;
-        // available() will often return > 1, so we need to read in chunks to
-        // stay caught up.
-        char [] readBuffer = new char[128];
-        List<TInputEvent> events = new LinkedList<TInputEvent>();
-
-        while (!done && !stopReaderThread) {
-            try {
-                // We assume that if inputStream has bytes available, then
-                // input won't block on read().
-                int n = inputStream.available();
-                if (n > 0) {
-                    if (readBuffer.length < n) {
-                        // The buffer wasn't big enough, make it huger
-                        readBuffer = new char[readBuffer.length * 2];
-                    }
-
-                    int rc = input.read(readBuffer, 0, readBuffer.length);
-                    // System.err.printf("read() %d", rc); System.err.flush();
-                    if (rc == -1) {
-                        // This is EOF
-                        done = true;
-                    } else {
-                        for (int i = 0; i < rc; i++) {
-                            int ch = readBuffer[i];
-                            processChar(events, (char)ch);
-                        }
-                        getIdleEvents(events);
-                        if (events.size() > 0) {
-                            // Add to the queue for the backend thread to
-                            // be able to obtain.
-                            synchronized (eventQueue) {
-                                eventQueue.addAll(events);
-                            }
-                            synchronized (listener) {
-                                listener.notifyAll();
-                            }
-                            events.clear();
-                        }
-                    }
-                } else {
-                    getIdleEvents(events);
-                    if (events.size() > 0) {
-                        synchronized (eventQueue) {
-                            eventQueue.addAll(events);
-                        }
-                        events.clear();
-                        synchronized (listener) {
-                            listener.notifyAll();
-                        }
-                    }
-
-                    // Wait 10 millis for more data
-                    Thread.sleep(10);
-                }
-                // System.err.println("end while loop"); System.err.flush();
-            } catch (InterruptedException e) {
-                // SQUASH
-            } catch (IOException e) {
-                e.printStackTrace();
-                done = true;
-            }
-        } // while ((done == false) && (stopReaderThread == false))
-        // System.err.println("*** run() exiting..."); System.err.flush();
     }
 
 }

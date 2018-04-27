@@ -26,93 +26,58 @@
  * @author Kevin Lamonte [kevin.lamonte@gmail.com]
  * @version 1
  */
-package jexer.session;
+package jexer.backend;
 
 /**
- * TSessionInfo provides a default session implementation.  The username is
- * blank, language is "en_US", with a 80x24 text window.
+ * SessionInfo is used to store per-session properties that are determined at
+ * different layers of the communication stack.
  */
-public final class TSessionInfo implements SessionInfo {
-
-    /**
-     * User name.
-     */
-    private String username = "";
-
-    /**
-     * Language.
-     */
-    private String language = "en_US";
-
-    /**
-     * Text window width.
-     */
-    private int windowWidth = 80;
-
-    /**
-     * Text window height.
-     */
-    private int windowHeight = 24;
+public interface SessionInfo {
 
     /**
      * Username getter.
      *
      * @return the username
      */
-    public String getUsername() {
-        return this.username;
-    }
+    public String getUsername();
 
     /**
      * Username setter.
      *
      * @param username the value
      */
-    public void setUsername(final String username) {
-        this.username = username;
-    }
+    public void setUsername(String username);
 
     /**
      * Language getter.
      *
      * @return the language
      */
-    public String getLanguage() {
-        return this.language;
-    }
+    public String getLanguage();
 
     /**
      * Language setter.
      *
      * @param language the value
      */
-    public void setLanguage(final String language) {
-        this.language = language;
-    }
+    public void setLanguage(String language);
 
     /**
      * Text window width getter.
      *
      * @return the window width
      */
-    public int getWindowWidth() {
-        return windowWidth;
-    }
+    public int getWindowWidth();
 
     /**
      * Text window height getter.
      *
      * @return the window height
      */
-    public int getWindowHeight() {
-        return windowHeight;
-    }
+    public int getWindowHeight();
 
     /**
      * Re-query the text window size.
      */
-    public void queryWindowSize() {
-        // NOP
-    }
-
+    public void queryWindowSize();
 }
