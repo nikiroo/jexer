@@ -2,7 +2,7 @@ package jexer.demos;
 
 import jexer.TApplication;
 
-public class Demo4 {
+public class Demo7 {
 	public static void main(String[] args) {
 		try {
 			// Swing is the default backend on Windows unless explicitly
