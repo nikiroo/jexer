@@ -39,30 +39,14 @@ import static jexer.TKeypress.*;
  */
 public class TField extends TWidget {
 
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Field text.
      */
     protected String text = "";
-
-    /**
-     * Get field text.
-     *
-     * @return field text
-     */
-    public final String getText() {
-        return text;
-    }
-
-    /**
-     * Set field text.
-     *
-     * @param text the new field text
-     */
-    public final void setText(String text) {
-        this.text = text;
-        position = 0;
-        windowStart = 0;
-    }
 
     /**
      * If true, only allow enough characters that will fit in the width.  If
@@ -99,6 +83,10 @@ public class TField extends TWidget {
      * The action to perform when the text is updated.
      */
     protected TAction updateAction;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
@@ -157,6 +145,10 @@ public class TField extends TWidget {
         this.updateAction = updateAction;
     }
 
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Returns true if the mouse is currently on the field.
      *
@@ -172,62 +164,6 @@ public class TField extends TWidget {
             return true;
         }
         return false;
-    }
-
-    /**
-     * Dispatch to the action function.
-     *
-     * @param enter if true, the user pressed Enter, else this was an update
-     * to the text.
-     */
-    protected void dispatch(final boolean enter) {
-        if (enter) {
-            if (enterAction != null) {
-                enterAction.DO();
-            }
-        } else {
-            if (updateAction != null) {
-                updateAction.DO();
-            }
-        }
-    }
-
-    /**
-     * Draw the text field.
-     */
-    @Override
-    public void draw() {
-        CellAttributes fieldColor;
-
-        if (isAbsoluteActive()) {
-            fieldColor = getTheme().getColor("tfield.active");
-        } else {
-            fieldColor = getTheme().getColor("tfield.inactive");
-        }
-
-        int end = windowStart + getWidth();
-        if (end > text.length()) {
-            end = text.length();
-        }
-        getScreen().hLineXY(0, 0, getWidth(), GraphicsChars.HATCH, fieldColor);
-        getScreen().putStringXY(0, 0, text.substring(windowStart, end),
-            fieldColor);
-
-        // Fix the cursor, it will be rendered by TApplication.drawAll().
-        updateCursor();
-    }
-
-    /**
-     * Update the cursor position.
-     */
-    protected void updateCursor() {
-        if ((position > getWidth()) && fixed) {
-            setCursorX(getWidth());
-        } else if ((position - windowStart == getWidth()) && !fixed) {
-            setCursorX(getWidth() - 1);
-        } else {
-            setCursorX(position - windowStart);
-        }
     }
 
     /**
@@ -268,6 +204,7 @@ public class TField extends TWidget {
                     windowStart--;
                 }
             }
+            normalizeWindowStart();
             return;
         }
 
@@ -297,23 +234,12 @@ public class TField extends TWidget {
             return;
         }
         if (keypress.equals(kbHome)) {
-            position = 0;
-            windowStart = 0;
+            home();
             return;
         }
 
         if (keypress.equals(kbEnd)) {
-            position = text.length();
-            if (fixed == true) {
-                if (position >= getWidth()) {
-                    position = text.length() - 1;
-                }
-            } else {
-                windowStart = text.length() - getWidth() + 1;
-                if (windowStart < 0) {
-                    windowStart = 0;
-                }
-            }
+            end();
             return;
         }
 
@@ -322,6 +248,7 @@ public class TField extends TWidget {
                 text = text.substring(0, position)
                         + text.substring(position + 1);
             }
+            dispatch(false);
             return;
         }
 
@@ -339,6 +266,7 @@ public class TField extends TWidget {
                 }
             }
             dispatch(false);
+            normalizeWindowStart();
             return;
         }
 
@@ -409,6 +337,108 @@ public class TField extends TWidget {
         super.onKeypress(keypress);
     }
 
+    // ------------------------------------------------------------------------
+    // TWidget ----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Draw the text field.
+     */
+    @Override
+    public void draw() {
+        CellAttributes fieldColor;
+
+        if (isAbsoluteActive()) {
+            fieldColor = getTheme().getColor("tfield.active");
+        } else {
+            fieldColor = getTheme().getColor("tfield.inactive");
+        }
+
+        int end = windowStart + getWidth();
+        if (end > text.length()) {
+            end = text.length();
+        }
+        getScreen().hLineXY(0, 0, getWidth(), GraphicsChars.HATCH, fieldColor);
+        getScreen().putStringXY(0, 0, text.substring(windowStart, end),
+            fieldColor);
+
+        // Fix the cursor, it will be rendered by TApplication.drawAll().
+        updateCursor();
+    }
+
+    // ------------------------------------------------------------------------
+    // TField -----------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Get field text.
+     *
+     * @return field text
+     */
+    public final String getText() {
+        return text;
+    }
+
+    /**
+     * Set field text.
+     *
+     * @param text the new field text
+     */
+    public void setText(final String text) {
+        this.text = text;
+        position = 0;
+        windowStart = 0;
+    }
+
+    /**
+     * Dispatch to the action function.
+     *
+     * @param enter if true, the user pressed Enter, else this was an update
+     * to the text.
+     */
+    protected void dispatch(final boolean enter) {
+        if (enter) {
+            if (enterAction != null) {
+                enterAction.DO();
+            }
+        } else {
+            if (updateAction != null) {
+                updateAction.DO();
+            }
+        }
+    }
+
+    /**
+     * Update the visible cursor position to match the location of position
+     * and windowStart.
+     */
+    protected void updateCursor() {
+        if ((position > getWidth()) && fixed) {
+            setCursorX(getWidth());
+        } else if ((position - windowStart == getWidth()) && !fixed) {
+            setCursorX(getWidth() - 1);
+        } else {
+            setCursorX(position - windowStart);
+        }
+    }
+
+    /**
+     * Normalize windowStart such that most of the field data if visible.
+     */
+    protected void normalizeWindowStart() {
+        if (fixed) {
+            // windowStart had better be zero, there is nothing to do here.
+            assert (windowStart == 0);
+            return;
+        }
+        windowStart = position - (getWidth() - 1);
+        if (windowStart < 0) {
+            windowStart = 0;
+        }
+
+        updateCursor();
+    }
+
     /**
      * Append char to the end of the field.
      *
@@ -444,6 +474,50 @@ public class TField extends TWidget {
             assert (!fixed);
             windowStart++;
         }
+    }
+
+    /**
+     * Position the cursor at the first column.  The field may adjust the
+     * window start to show as much of the field as possible.
+     */
+    public void home() {
+        position = 0;
+        windowStart = 0;
+    }
+
+    /**
+     * Set the editing position to the last filled character.  The field may
+     * adjust the window start to show as much of the field as possible.
+     */
+    public void end() {
+        position = text.length();
+        if (fixed == true) {
+            if (position >= getWidth()) {
+                position = text.length() - 1;
+            }
+        } else {
+            windowStart = text.length() - getWidth() + 1;
+            if (windowStart < 0) {
+                windowStart = 0;
+            }
+        }
+    }
+
+    /**
+     * Set the editing position.  The field may adjust the window start to
+     * show as much of the field as possible.
+     *
+     * @param position the new position
+     * @throws IndexOutOfBoundsException if position is outside the range of
+     * the available text
+     */
+    public void setPosition(final int position) {
+        if ((position < 0) || (position >= text.length())) {
+            throw new IndexOutOfBoundsException("Max length is " +
+                text.length() + ", requested position " + position);
+        }
+        this.position = position;
+        normalizeWindowStart();
     }
 
 }

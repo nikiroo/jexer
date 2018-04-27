@@ -34,14 +34,21 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.TreeMap;
 
-import jexer.session.SessionInfo;
+import jexer.backend.SessionInfo;
 import static jexer.net.TelnetSocket.*;
 
 /**
  * TelnetInputStream works with TelnetSocket to perform the telnet protocol.
  */
-public final class TelnetInputStream extends InputStream
-        implements SessionInfo {
+public class TelnetInputStream extends InputStream implements SessionInfo {
+
+    // ------------------------------------------------------------------------
+    // Constants --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * The root TelnetSocket that has my telnet protocol state.
@@ -77,6 +84,61 @@ public final class TelnetInputStream extends InputStream
     private int readBufferStart;
 
     /**
+     * User name.
+     */
+    private String username = "";
+
+    /**
+     * Language.
+     */
+    private String language = "en_US";
+
+    /**
+     * Text window width.
+     */
+    private int windowWidth = 80;
+
+    /**
+     * Text window height.
+     */
+    private int windowHeight = 24;
+
+    /**
+     * When true, the last read byte from the remote side was IAC.
+     */
+    private boolean iac = false;
+
+    /**
+     * When true, we are in the middle of a DO/DONT/WILL/WONT negotiation.
+     */
+    private boolean dowill = false;
+
+    /**
+     * The telnet option being negotiated.
+     */
+    private int dowillType = 0;
+
+    /**
+     * When true, we are waiting to see the end of the sub-negotiation
+     * sequence.
+     */
+    private boolean subnegEnd = false;
+
+    /**
+     * When true, the last byte read from the remote side was CR.
+     */
+    private boolean readCR = false;
+
+    /**
+     * The subnegotiation buffer.
+     */
+    private ArrayList<Byte> subnegBuffer;
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
      * Package private constructor.
      *
      * @param master the master TelnetSocket
@@ -97,27 +159,9 @@ public final class TelnetInputStream extends InputStream
         subnegBuffer    = new ArrayList<Byte>();
     }
 
-    // SessionInfo interface --------------------------------------------------
-
-    /**
-     * User name.
-     */
-    private String username = "";
-
-    /**
-     * Language.
-     */
-    private String language = "en_US";
-
-    /**
-     * Text window width.
-     */
-    private int windowWidth = 80;
-
-    /**
-     * Text window height.
-     */
-    private int windowHeight = 24;
+    // ------------------------------------------------------------------------
+    // SessionInfo ------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Username getter.
@@ -180,7 +224,9 @@ public final class TelnetInputStream extends InputStream
         // NOP
     }
 
-    // InputStream interface --------------------------------------------------
+    // ------------------------------------------------------------------------
+    // InputStream ------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Returns an estimate of the number of bytes that can be read (or
@@ -371,39 +417,9 @@ public final class TelnetInputStream extends InputStream
         return n;
     }
 
-    // Telnet protocol --------------------------------------------------------
-
-
-    /**
-     * When true, the last read byte from the remote side was IAC.
-     */
-    private boolean iac = false;
-
-    /**
-     * When true, we are in the middle of a DO/DONT/WILL/WONT negotiation.
-     */
-    private boolean dowill = false;
-
-    /**
-     * The telnet option being negotiated.
-     */
-    private int dowillType = 0;
-
-    /**
-     * When true, we are waiting to see the end of the sub-negotiation
-     * sequence.
-     */
-    private boolean subnegEnd = false;
-
-    /**
-     * When true, the last byte read from the remote side was CR.
-     */
-    private boolean readCR = false;
-
-    /**
-     * The subnegotiation buffer.
-     */
-    private ArrayList<Byte> subnegBuffer;
+    // ------------------------------------------------------------------------
+    // TelnetInputStream ------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * For debugging, return a descriptive string for this telnet option.
@@ -1347,6 +1363,5 @@ public final class TelnetInputStream extends InputStream
         // Return bytes read
         return bufN;
     }
-
 
 }

@@ -33,28 +33,14 @@ package jexer.bits;
  */
 public class CellAttributes {
 
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
      * Bold attribute.
      */
     private boolean bold;
-
-    /**
-     * Getter for bold.
-     *
-     * @return bold value
-     */
-    public final boolean isBold() {
-        return bold;
-    }
-
-    /**
-     * Setter for bold.
-     *
-     * @param bold new bold value
-     */
-    public final void setBold(final boolean bold) {
-        this.bold = bold;
-    }
 
     /**
      * Blink attribute.
@@ -62,45 +48,9 @@ public class CellAttributes {
     private boolean blink;
 
     /**
-     * Getter for blink.
-     *
-     * @return blink value
-     */
-    public final boolean isBlink() {
-        return blink;
-    }
-
-    /**
-     * Setter for blink.
-     *
-     * @param blink new blink value
-     */
-    public final void setBlink(final boolean blink) {
-        this.blink = blink;
-    }
-
-    /**
      * Reverse attribute.
      */
     private boolean reverse;
-
-    /**
-     * Getter for reverse.
-     *
-     * @return reverse value
-     */
-    public final boolean isReverse() {
-        return reverse;
-    }
-
-    /**
-     * Setter for reverse.
-     *
-     * @param reverse new reverse value
-     */
-    public final void setReverse(final boolean reverse) {
-        this.reverse = reverse;
-    }
 
     /**
      * Underline attribute.
@@ -108,45 +58,9 @@ public class CellAttributes {
     private boolean underline;
 
     /**
-     * Getter for underline.
-     *
-     * @return underline value
-     */
-    public final boolean isUnderline() {
-        return underline;
-    }
-
-    /**
-     * Setter for underline.
-     *
-     * @param underline new underline value
-     */
-    public final void setUnderline(final boolean underline) {
-        this.underline = underline;
-    }
-
-    /**
      * Protected attribute.
      */
     private boolean protect;
-
-    /**
-     * Getter for protect.
-     *
-     * @return protect value
-     */
-    public final boolean isProtect() {
-        return protect;
-    }
-
-    /**
-     * Setter for protect.
-     *
-     * @param protect new protect value
-     */
-    public final void setProtect(final boolean protect) {
-        this.protect = protect;
-    }
 
     /**
      * Foreground color.  Color.WHITE, Color.RED, etc.
@@ -154,59 +68,23 @@ public class CellAttributes {
     private Color foreColor;
 
     /**
-     * Getter for foreColor.
-     *
-     * @return foreColor value
-     */
-    public final Color getForeColor() {
-        return foreColor;
-    }
-
-    /**
-     * Setter for foreColor.
-     *
-     * @param foreColor new foreColor value
-     */
-    public final void setForeColor(final Color foreColor) {
-        this.foreColor = foreColor;
-    }
-
-    /**
      * Background color.  Color.WHITE, Color.RED, etc.
      */
     private Color backColor;
 
     /**
-     * Getter for backColor.
-     *
-     * @return backColor value
+     * Foreground color as 24-bit RGB value.  Negative value means not set.
      */
-    public final Color getBackColor() {
-        return backColor;
-    }
+    private int foreColorRGB = -1;
 
     /**
-     * Setter for backColor.
-     *
-     * @param backColor new backColor value
+     * Background color as 24-bit RGB value.  Negative value means not set.
      */
-    public final void setBackColor(final Color backColor) {
-        this.backColor = backColor;
-    }
+    private int backColorRGB = -1;
 
-    /**
-     * Set to default: white foreground on black background, no
-     * bold/underline/blink/rever/protect.
-     */
-    public void reset() {
-        bold      = false;
-        blink     = false;
-        reverse   = false;
-        underline = false;
-        protect   = false;
-        foreColor = Color.WHITE;
-        backColor = Color.BLACK;
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor sets default values of the cell to white-on-black,
@@ -228,6 +106,197 @@ public class CellAttributes {
         setTo(that);
     }
 
+    // ------------------------------------------------------------------------
+    // CellAttributes ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Getter for bold.
+     *
+     * @return bold value
+     */
+    public final boolean isBold() {
+        return bold;
+    }
+
+    /**
+     * Setter for bold.
+     *
+     * @param bold new bold value
+     */
+    public final void setBold(final boolean bold) {
+        this.bold = bold;
+    }
+
+    /**
+     * Getter for blink.
+     *
+     * @return blink value
+     */
+    public final boolean isBlink() {
+        return blink;
+    }
+
+    /**
+     * Setter for blink.
+     *
+     * @param blink new blink value
+     */
+    public final void setBlink(final boolean blink) {
+        this.blink = blink;
+    }
+
+    /**
+     * Getter for reverse.
+     *
+     * @return reverse value
+     */
+    public final boolean isReverse() {
+        return reverse;
+    }
+
+    /**
+     * Setter for reverse.
+     *
+     * @param reverse new reverse value
+     */
+    public final void setReverse(final boolean reverse) {
+        this.reverse = reverse;
+    }
+
+    /**
+     * Getter for underline.
+     *
+     * @return underline value
+     */
+    public final boolean isUnderline() {
+        return underline;
+    }
+
+    /**
+     * Setter for underline.
+     *
+     * @param underline new underline value
+     */
+    public final void setUnderline(final boolean underline) {
+        this.underline = underline;
+    }
+
+    /**
+     * Getter for protect.
+     *
+     * @return protect value
+     */
+    public final boolean isProtect() {
+        return protect;
+    }
+
+    /**
+     * Setter for protect.
+     *
+     * @param protect new protect value
+     */
+    public final void setProtect(final boolean protect) {
+        this.protect = protect;
+    }
+
+    /**
+     * Getter for foreColor.
+     *
+     * @return foreColor value
+     */
+    public final Color getForeColor() {
+        return foreColor;
+    }
+
+    /**
+     * Setter for foreColor.
+     *
+     * @param foreColor new foreColor value
+     */
+    public final void setForeColor(final Color foreColor) {
+        this.foreColor = foreColor;
+    }
+
+    /**
+     * Getter for backColor.
+     *
+     * @return backColor value
+     */
+    public final Color getBackColor() {
+        return backColor;
+    }
+
+    /**
+     * Setter for backColor.
+     *
+     * @param backColor new backColor value
+     */
+    public final void setBackColor(final Color backColor) {
+        this.backColor = backColor;
+    }
+
+    /**
+     * Getter for foreColor RGB.
+     *
+     * @return foreColor value.  Negative means unset.
+     */
+    public final int getForeColorRGB() {
+        return foreColorRGB;
+    }
+
+    /**
+     * Setter for foreColor RGB.
+     *
+     * @param foreColorRGB new foreColor RGB value
+     */
+    public final void setForeColorRGB(final int foreColorRGB) {
+        this.foreColorRGB = foreColorRGB;
+    }
+
+    /**
+     * Getter for backColor RGB.
+     *
+     * @return backColor value.  Negative means unset.
+     */
+    public final int getBackColorRGB() {
+        return backColorRGB;
+    }
+
+    /**
+     * Setter for backColor RGB.
+     *
+     * @param backColorRGB new backColor RGB value
+     */
+    public final void setBackColorRGB(final int backColorRGB) {
+        this.backColorRGB = backColorRGB;
+    }
+
+    /**
+     * See if this cell uses RGB or ANSI colors.
+     *
+     * @return true if this cell has a RGB color
+     */
+    public final boolean isRGB() {
+        return (foreColorRGB >= 0) || (backColorRGB >= 0);
+    }
+
+    /**
+     * Set to default: white foreground on black background, no
+     * bold/underline/blink/rever/protect.
+     */
+    public void reset() {
+        bold            = false;
+        blink           = false;
+        reverse         = false;
+        underline       = false;
+        protect         = false;
+        foreColor       = Color.WHITE;
+        backColor       = Color.BLACK;
+        foreColorRGB    = -1;
+        backColorRGB    = -1;
+    }
+
     /**
      * Comparison check.  All fields must match to return true.
      *
@@ -243,6 +312,8 @@ public class CellAttributes {
         CellAttributes that = (CellAttributes) rhs;
         return ((foreColor == that.foreColor)
             && (backColor == that.backColor)
+            && (foreColorRGB == that.foreColorRGB)
+            && (backColorRGB == that.backColorRGB)
             && (bold == that.bold)
             && (reverse == that.reverse)
             && (underline == that.underline)
@@ -267,6 +338,8 @@ public class CellAttributes {
         hash = (B * hash) + (protect ? 1 : 0);
         hash = (B * hash) + foreColor.hashCode();
         hash = (B * hash) + backColor.hashCode();
+        hash = (B * hash) + foreColorRGB;
+        hash = (B * hash) + backColorRGB;
         return hash;
     }
 
@@ -278,13 +351,15 @@ public class CellAttributes {
     public void setTo(final Object rhs) {
         CellAttributes that = (CellAttributes) rhs;
 
-        this.bold      = that.bold;
-        this.blink     = that.blink;
-        this.reverse   = that.reverse;
-        this.underline = that.underline;
-        this.protect   = that.protect;
-        this.foreColor = that.foreColor;
-        this.backColor = that.backColor;
+        this.bold               = that.bold;
+        this.blink              = that.blink;
+        this.reverse            = that.reverse;
+        this.underline          = that.underline;
+        this.protect            = that.protect;
+        this.foreColor          = that.foreColor;
+        this.backColor          = that.backColor;
+        this.foreColorRGB       = that.foreColorRGB;
+        this.backColorRGB       = that.backColorRGB;
     }
 
     /**
@@ -294,12 +369,13 @@ public class CellAttributes {
      */
     @Override
     public String toString() {
-        if (bold) {
-            return String.format("bold %s on %s",
-                foreColor, backColor);
-        } else {
-            return String.format("%s on %s", foreColor, backColor);
+        if ((foreColorRGB >= 0) || (backColorRGB >= 0)) {
+            return String.format("RGB: #%06x on #%06x",
+                (foreColorRGB & 0xFFFFFF),
+                (backColorRGB & 0xFFFFFF));
         }
+        return String.format("%s%s%s on %s", (bold == true ? "bold " : ""),
+            (blink == true ? "blink " : ""), foreColor, backColor);
     }
 
 }

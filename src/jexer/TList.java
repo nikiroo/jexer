@@ -39,7 +39,11 @@ import static jexer.TKeypress.*;
 /**
  * TList shows a list of strings, and lets the user select one.
  */
-public class TList extends TWidget {
+public class TList extends TScrollableWidget {
+
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * The list of strings to display.
@@ -50,75 +54,6 @@ public class TList extends TWidget {
      * Selected string.
      */
     private int selectedString = -1;
-
-    /**
-     * Get the selection index.
-     *
-     * @return -1 if nothing is selected, otherwise the index into the list
-     */
-    public final int getSelectedIndex() {
-        return selectedString;
-    }
-
-    /**
-     * Set the selected string index.
-     *
-     * @param index -1 to unselect, otherwise the index into the list
-     */
-    public final void setSelectedIndex(final int index) {
-        selectedString = index;
-    }
-
-    /**
-     * Get the selected string.
-     *
-     * @return the selected string, or null of nothing is selected yet
-     */
-    public final String getSelected() {
-        if ((selectedString >= 0) && (selectedString <= strings.size() - 1)) {
-            return strings.get(selectedString);
-        }
-        return null;
-    }
-
-    /**
-     * Set the new list of strings to display.
-     *
-     * @param list new list of strings
-     */
-    public final void setList(final List<String> list) {
-        strings.clear();
-        strings.addAll(list);
-        reflow();
-    }
-
-    /**
-     * Vertical scrollbar.
-     */
-    private TVScroller vScroller;
-
-    /**
-     * Get the vertical scrollbar.  This is used by subclasses.
-     *
-     * @return the vertical scrollbar
-     */
-    public final TVScroller getVScroller() {
-        return vScroller;
-    }
-
-    /**
-     * Horizontal scrollbar.
-     */
-    private THScroller hScroller;
-
-    /**
-     * Get the horizontal scrollbar.  This is used by subclasses.
-     *
-     * @return the horizontal scrollbar
-     */
-    public final THScroller getHScroller() {
-        return hScroller;
-    }
 
     /**
      * Maximum width of a single line.
@@ -135,76 +70,9 @@ public class TList extends TWidget {
      */
     private TAction moveAction = null;
 
-    /**
-     * Perform user selection action.
-     */
-    public void dispatchEnter() {
-        assert (selectedString >= 0);
-        assert (selectedString < strings.size());
-        if (enterAction != null) {
-            enterAction.DO();
-        }
-    }
-
-    /**
-     * Perform list movement action.
-     */
-    public void dispatchMove() {
-        assert (selectedString >= 0);
-        assert (selectedString < strings.size());
-        if (moveAction != null) {
-            moveAction.DO();
-        }
-    }
-
-    /**
-     * Resize for a new width/height.
-     */
-    public void reflow() {
-
-        // Reset the lines
-        selectedString = -1;
-        maxLineWidth = 0;
-
-        for (int i = 0; i < strings.size(); i++) {
-            String line = strings.get(i);
-            if (line.length() > maxLineWidth) {
-                maxLineWidth = line.length();
-            }
-        }
-
-        // Start at the top
-        if (vScroller == null) {
-            vScroller = new TVScroller(this, getWidth() - 1, 0,
-                getHeight() - 1);
-        } else {
-            vScroller.setX(getWidth() - 1);
-            vScroller.setHeight(getHeight() - 1);
-        }
-        vScroller.setBottomValue(strings.size() - getHeight() + 1);
-        vScroller.setTopValue(0);
-        vScroller.setValue(0);
-        if (vScroller.getBottomValue() < 0) {
-            vScroller.setBottomValue(0);
-        }
-        vScroller.setBigChange(getHeight() - 1);
-
-        // Start at the left
-        if (hScroller == null) {
-            hScroller = new THScroller(this, 0, getHeight() - 1,
-                getWidth() - 1);
-        } else {
-            hScroller.setY(getHeight() - 1);
-            hScroller.setWidth(getWidth() - 1);
-        }
-        hScroller.setRightValue(maxLineWidth - getWidth() + 1);
-        hScroller.setLeftValue(0);
-        hScroller.setValue(0);
-        if (hScroller.getRightValue() < 0) {
-            hScroller.setRightValue(0);
-        }
-        hScroller.setBigChange(getWidth() - 1);
-    }
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Public constructor.
@@ -244,7 +112,10 @@ public class TList extends TWidget {
         if (strings != null) {
             this.strings.addAll(strings);
         }
-        reflow();
+
+        hScroller = new THScroller(this, 0, getHeight() - 1, getWidth() - 1);
+        vScroller = new TVScroller(this, getWidth() - 1, 0, getHeight() - 1);
+        reflowData();
     }
 
     /**
@@ -272,7 +143,189 @@ public class TList extends TWidget {
         if (strings != null) {
             this.strings.addAll(strings);
         }
-        reflow();
+
+        hScroller = new THScroller(this, 0, getHeight() - 1, getWidth() - 1);
+        vScroller = new TVScroller(this, getWidth() - 1, 0, getHeight() - 1);
+        reflowData();
+    }
+
+    // ------------------------------------------------------------------------
+    // Event handlers ---------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Handle mouse press events.
+     *
+     * @param mouse mouse button press event
+     */
+    @Override
+    public void onMouseDown(final TMouseEvent mouse) {
+        if (mouse.isMouseWheelUp()) {
+            verticalDecrement();
+            return;
+        }
+        if (mouse.isMouseWheelDown()) {
+            verticalIncrement();
+            return;
+        }
+
+        if ((mouse.getX() < getWidth() - 1)
+            && (mouse.getY() < getHeight() - 1)) {
+            if (getVerticalValue() + mouse.getY() < strings.size()) {
+                selectedString = getVerticalValue() + mouse.getY();
+            }
+            return;
+        }
+
+        // Pass to children
+        super.onMouseDown(mouse);
+    }
+
+    /**
+     * Handle mouse double click.
+     *
+     * @param mouse mouse double click event
+     */
+    @Override
+    public void onMouseDoubleClick(final TMouseEvent mouse) {
+        if ((mouse.getX() < getWidth() - 1)
+            && (mouse.getY() < getHeight() - 1)) {
+            if (getVerticalValue() + mouse.getY() < strings.size()) {
+                selectedString = getVerticalValue() + mouse.getY();
+                dispatchEnter();
+            }
+            return;
+        }
+
+        // Pass to children
+        super.onMouseDoubleClick(mouse);
+    }
+
+    /**
+     * Handle keystrokes.
+     *
+     * @param keypress keystroke event
+     */
+    @Override
+    public void onKeypress(final TKeypressEvent keypress) {
+        if (keypress.equals(kbLeft)) {
+            horizontalDecrement();
+        } else if (keypress.equals(kbRight)) {
+            horizontalIncrement();
+        } else if (keypress.equals(kbUp)) {
+            if (strings.size() > 0) {
+                if (selectedString >= 0) {
+                    if (selectedString > 0) {
+                        if (selectedString - getVerticalValue() == 0) {
+                            verticalDecrement();
+                        }
+                        selectedString--;
+                    }
+                } else {
+                    selectedString = strings.size() - 1;
+                }
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbDown)) {
+            if (strings.size() > 0) {
+                if (selectedString >= 0) {
+                    if (selectedString < strings.size() - 1) {
+                        selectedString++;
+                        if (selectedString - getVerticalValue() == getHeight() - 1) {
+                            verticalIncrement();
+                        }
+                    }
+                } else {
+                    selectedString = 0;
+                }
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbPgUp)) {
+            bigVerticalDecrement();
+            if (selectedString >= 0) {
+                selectedString -= getHeight() - 1;
+                if (selectedString < 0) {
+                    selectedString = 0;
+                }
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbPgDn)) {
+            bigVerticalIncrement();
+            if (selectedString >= 0) {
+                selectedString += getHeight() - 1;
+                if (selectedString > strings.size() - 1) {
+                    selectedString = strings.size() - 1;
+                }
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbHome)) {
+            toTop();
+            if (strings.size() > 0) {
+                selectedString = 0;
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbEnd)) {
+            toBottom();
+            if (strings.size() > 0) {
+                selectedString = strings.size() - 1;
+            }
+            if (selectedString >= 0) {
+                dispatchMove();
+            }
+        } else if (keypress.equals(kbTab)) {
+            getParent().switchWidget(true);
+        } else if (keypress.equals(kbShiftTab) || keypress.equals(kbBackTab)) {
+            getParent().switchWidget(false);
+        } else if (keypress.equals(kbEnter)) {
+            if (selectedString >= 0) {
+                dispatchEnter();
+            }
+        } else {
+            // Pass other keys (tab etc.) on
+            super.onKeypress(keypress);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // TScrollableWidget ------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+    /**
+     * Resize for a new width/height.
+     */
+    @Override
+    public void reflowData() {
+
+        // Reset the lines
+        selectedString = -1;
+        maxLineWidth = 0;
+
+        for (int i = 0; i < strings.size(); i++) {
+            String line = strings.get(i);
+            if (line.length() > maxLineWidth) {
+                maxLineWidth = line.length();
+            }
+        }
+
+        setBottomValue(strings.size() - getHeight() + 1);
+        if (getBottomValue() < 0) {
+            setBottomValue(0);
+        }
+
+        setRightValue(maxLineWidth - getWidth() + 1);
+        if (getRightValue() < 0) {
+            setRightValue(0);
+        }
     }
 
     /**
@@ -281,17 +334,21 @@ public class TList extends TWidget {
     @Override
     public void draw() {
         CellAttributes color = null;
-        int begin = vScroller.getValue();
+        int begin = getVerticalValue();
         int topY = 0;
         for (int i = begin; i < strings.size(); i++) {
             String line = strings.get(i);
-            if (hScroller.getValue() < line.length()) {
-                line = line.substring(hScroller.getValue());
+            if (getHorizontalValue() < line.length()) {
+                line = line.substring(getHorizontalValue());
             } else {
                 line = "";
             }
             if (i == selectedString) {
-                color = getTheme().getColor("tlist.selected");
+                if (isAbsoluteActive()) {
+                    color = getTheme().getColor("tlist.selected");
+                } else {
+                    color = getTheme().getColor("tlist.selected.inactive");
+                }
             } else if (isAbsoluteActive()) {
                 color = getTheme().getColor("tlist");
             } else {
@@ -318,127 +375,79 @@ public class TList extends TWidget {
         }
     }
 
+    // ------------------------------------------------------------------------
+    // TList ------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
     /**
-     * Handle mouse press events.
+     * Get the selection index.
      *
-     * @param mouse mouse button press event
+     * @return -1 if nothing is selected, otherwise the index into the list
      */
-    @Override
-    public void onMouseDown(final TMouseEvent mouse) {
-        if (mouse.isMouseWheelUp()) {
-            vScroller.decrement();
-            return;
-        }
-        if (mouse.isMouseWheelDown()) {
-            vScroller.increment();
-            return;
-        }
-
-        if ((mouse.getX() < getWidth() - 1)
-            && (mouse.getY() < getHeight() - 1)) {
-            if (vScroller.getValue() + mouse.getY() < strings.size()) {
-                selectedString = vScroller.getValue() + mouse.getY();
-            }
-            dispatchEnter();
-            return;
-        }
-
-        // Pass to children
-        super.onMouseDown(mouse);
+    public final int getSelectedIndex() {
+        return selectedString;
     }
 
     /**
-     * Handle keystrokes.
+     * Set the selected string index.
      *
-     * @param keypress keystroke event
+     * @param index -1 to unselect, otherwise the index into the list
      */
-    @Override
-    public void onKeypress(final TKeypressEvent keypress) {
-        if (keypress.equals(kbLeft)) {
-            hScroller.decrement();
-        } else if (keypress.equals(kbRight)) {
-            hScroller.increment();
-        } else if (keypress.equals(kbUp)) {
-            if (strings.size() > 0) {
-                if (selectedString >= 0) {
-                    if (selectedString > 0) {
-                        if (selectedString - vScroller.getValue() == 0) {
-                            vScroller.decrement();
-                        }
-                        selectedString--;
-                    }
-                } else {
-                    selectedString = strings.size() - 1;
-                }
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbDown)) {
-            if (strings.size() > 0) {
-                if (selectedString >= 0) {
-                    if (selectedString < strings.size() - 1) {
-                        selectedString++;
-                        if (selectedString - vScroller.getValue() == getHeight() - 1) {
-                            vScroller.increment();
-                        }
-                    }
-                } else {
-                    selectedString = 0;
-                }
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbPgUp)) {
-            vScroller.bigDecrement();
-            if (selectedString >= 0) {
-                selectedString -= getHeight() - 1;
-                if (selectedString < 0) {
-                    selectedString = 0;
-                }
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbPgDn)) {
-            vScroller.bigIncrement();
-            if (selectedString >= 0) {
-                selectedString += getHeight() - 1;
-                if (selectedString > strings.size() - 1) {
-                    selectedString = strings.size() - 1;
-                }
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbHome)) {
-            vScroller.toTop();
-            if (strings.size() > 0) {
-                selectedString = 0;
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbEnd)) {
-            vScroller.toBottom();
-            if (strings.size() > 0) {
-                selectedString = strings.size() - 1;
-            }
-            if (selectedString >= 0) {
-                dispatchMove();
-            }
-        } else if (keypress.equals(kbTab)) {
-            getParent().switchWidget(true);
-        } else if (keypress.equals(kbShiftTab) || keypress.equals(kbBackTab)) {
-            getParent().switchWidget(false);
-        } else if (keypress.equals(kbEnter)) {
-            if (selectedString >= 0) {
-                dispatchEnter();
-            }
-        } else {
-            // Pass other keys (tab etc.) on
-            super.onKeypress(keypress);
+    public final void setSelectedIndex(final int index) {
+        selectedString = index;
+    }
+
+    /**
+     * Get the selected string.
+     *
+     * @return the selected string, or null of nothing is selected yet
+     */
+    public final String getSelected() {
+        if ((selectedString >= 0) && (selectedString <= strings.size() - 1)) {
+            return strings.get(selectedString);
+        }
+        return null;
+    }
+
+    /**
+     * Get the maximum selection index value.
+     *
+     * @return -1 if the list is empty
+     */
+    public final int getMaxSelectedIndex() {
+        return strings.size() - 1;
+    }
+
+    /**
+     * Set the new list of strings to display.
+     *
+     * @param list new list of strings
+     */
+    public final void setList(final List<String> list) {
+        strings.clear();
+        strings.addAll(list);
+        reflowData();
+    }
+
+    /**
+     * Perform user selection action.
+     */
+    public void dispatchEnter() {
+        assert (selectedString >= 0);
+        assert (selectedString < strings.size());
+        if (enterAction != null) {
+            enterAction.DO();
+        }
+    }
+
+    /**
+     * Perform list movement action.
+     */
+    public void dispatchMove() {
+        assert (selectedString >= 0);
+        assert (selectedString < strings.size());
+        if (moveAction != null) {
+            moveAction.DO();
         }
     }
 

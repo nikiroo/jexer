@@ -37,9 +37,16 @@ import java.net.SocketException;
 /**
  * This class provides a ServerSocket that return TelnetSocket's in accept().
  */
-public final class TelnetServerSocket extends ServerSocket {
+public class TelnetServerSocket extends ServerSocket {
 
-    // ServerSocket interface -------------------------------------------------
+    // ------------------------------------------------------------------------
+    // Variables --------------------------------------------------------------
+    // ------------------------------------------------------------------------
+
+
+    // ------------------------------------------------------------------------
+    // Constructors -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Creates an unbound server socket.
@@ -93,6 +100,10 @@ public final class TelnetServerSocket extends ServerSocket {
 
         super(port, backlog, bindAddr);
     }
+
+    // ------------------------------------------------------------------------
+    // ServerSocket -----------------------------------------------------------
+    // ------------------------------------------------------------------------
 
     /**
      * Listens for a connection to be made to this socket and accepts it. The
