@@ -20,7 +20,6 @@ import jexer.bits.CellAttributes;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
-import jexer.event.TResizeEvent.Type;
 
 /**
  * A table widget to display and browse through tabular data.
@@ -32,11 +31,11 @@ public class TTable extends TWidget {
 	private List<Integer> columnSizes;
 	private boolean showHeader;
 
-	private List<List<String>> lines;
-	private int selectedLine;
+	private List<List<String>> rows;
+	private int selectedRow;
 	private int selectedColumn;
 
-	private int maxLineWidth;
+	private int maxRowWidth;
 	private int topY;
 
 	// some nice characters: ┃ │ |
@@ -105,8 +104,8 @@ public class TTable extends TWidget {
 			List<String> headers, boolean showHeaders) {
 		super(parent, x, y, width, height);
 
-		this.lines = new ArrayList<List<String>>();
-		this.selectedLine = -1;
+		this.rows = new ArrayList<List<String>>();
+		this.selectedRow = -1;
 		this.selectedColumn = -1;
 
 		setHeaders(headers, showHeaders);
@@ -129,28 +128,28 @@ public class TTable extends TWidget {
 	 *            TRUE to show them on screen
 	 */
 	public void setHeaders(List<String> headers, boolean showHeaders) {
-		List<String> line = null;
-		if (headers != null) {
-			this.headers = headers;
-			if (lines.size() > 0) {
-				line = lines.get(0);
-			}
-		} else {
-			this.headers = new ArrayList<String>();
+		if (headers == null) {
+			headers = new ArrayList<String>();
 		}
 
-		if (line != null && headers != null && line.size() != headers.size()) {
+		List<String> row = null;
+		if (rows.size() > 0) {
+			row = rows.get(0);
+		}
+
+		if (row != null && row.size() != headers.size()) {
 			throw new IllegalArgumentException(
 					String.format(
-							"Cannot set the headers of a table if the number of items is not equals to that of the current data lines: "
-									+ "%d elements in the data lines <> %d elements in the headers",
-							line.size(), headers.size()));
+							"Cannot set the headers of a table if the number of items is not equals to that of the current data rows: "
+									+ "%d elements in the data rows <> %d elements in the headers",
+							row.size(), headers.size()));
 		}
 
+		this.headers = headers;
 		this.showHeader = showHeaders;
 		this.topY = this.showHeader ? 2 : 0;
-		this.columnSizes = new ArrayList<Integer>(this.headers.size());
-		for (int i = 0; i < this.headers.size(); i++) {
+		this.columnSizes = new ArrayList<Integer>(headers.size());
+		for (int i = 0; i < headers.size(); i++) {
 			this.columnSizes.add(-1);
 		}
 	}
@@ -171,31 +170,31 @@ public class TTable extends TWidget {
 	}
 
 	/**
-	 * The currently selected line (or -1 if no line is selected).
+	 * The currently selected row (or -1 if no row is selected).
 	 * 
-	 * @return the selected line
+	 * @return the selected row
 	 */
-	public int getSelectedLine() {
-		return selectedLine;
+	public int getSelectedRow() {
+		return selectedRow;
 	}
 
 	/**
-	 * The currently selected line (or -1 if no line is selected).
+	 * The currently selected row (or -1 if no row is selected).
 	 * <p>
 	 * You may want to call {@link TTable#reflow()} when done to see the
 	 * changes.
 	 * 
-	 * @param selectedLine
-	 *            the selected line
+	 * @param selectedRow
+	 *            the selected row
 	 */
-	public void setSelectedLine(int selectedLine) {
-		if (selectedLine < -1 || selectedLine >= getNumberOfLines()) {
+	public void setSelectedRow(int selectedRow) {
+		if (selectedRow < -1 || selectedRow >= getNumberOfRows()) {
 			throw new IndexOutOfBoundsException(String.format(
-					"Cannot set column %d on a table with %d columns",
-					selectedColumn, getNumberOfLines()));
+					"Cannot set row %d on a table with %d rows", selectedRow,
+					getNumberOfRows()));
 		}
 
-		this.selectedLine = selectedLine;
+		this.selectedRow = selectedRow;
 	}
 
 	/**
@@ -232,8 +231,8 @@ public class TTable extends TWidget {
 	 * @return the cell
 	 */
 	public String getSelectedCell() {
-		if (selectedLine >= 0 && selectedColumn >= 0) {
-			return lines.get(selectedLine).get(selectedColumn);
+		if (selectedRow >= 0 && selectedColumn >= 0) {
+			return rows.get(selectedRow).get(selectedColumn);
 		}
 
 		return null;
@@ -258,7 +257,7 @@ public class TTable extends TWidget {
 	}
 
 	/**
-	 * Add a line to the table.
+	 * Add a row to the table.
 	 * <p>
 	 * Note that if some data is present, the number of columns <b>MUST</b> be
 	 * identical.
@@ -266,37 +265,37 @@ public class TTable extends TWidget {
 	 * You may want to call {@link TTable#reflow()} when done to see the
 	 * changes.
 	 * 
-	 * @param line
-	 *            the line to add
+	 * @param row
+	 *            the row to add
 	 */
-	public void addLine(List<String> line) {
-		if (line.size() != headers.size()) {
+	public void addRow(List<String> row) {
+		if (row.size() != headers.size()) {
 			throw new IllegalArgumentException(
 					String.format(
-							"Cannot insert a line in a table if the number of items is not equals to that of the header: "
-									+ "%d elements in the line <> %d elements in the headers",
-							line.size(), headers.size()));
+							"Cannot insert a row in a table if the number of items is not equals to that of the header: "
+									+ "%d elements in the row <> %d elements in the headers",
+							row.size(), headers.size()));
 		}
 
-		lines.add(line);
+		rows.add(row);
 	}
 
 	/**
-	 * The size of the table in number of lines.
+	 * The size of the table in number of rows.
 	 * 
 	 * @return the size
 	 */
 	public int size() {
-		return getNumberOfLines();
+		return getNumberOfRows();
 	}
 
 	/**
-	 * The number of lines.
+	 * The number of rows.
 	 * 
-	 * @return the number of lines
+	 * @return the number of rows
 	 */
-	public int getNumberOfLines() {
-		return lines.size();
+	public int getNumberOfRows() {
+		return rows.size();
 	}
 
 	/**
@@ -317,16 +316,16 @@ public class TTable extends TWidget {
 	 * changes.
 	 */
 	public void clear() {
-		selectedLine = -1;
+		selectedRow = -1;
 		selectedColumn = -1;
-		lines.clear();
+		rows.clear();
 	}
 
 	/**
 	 * Resize for a new width/height.
 	 */
 	public void reflow() {
-		computeLinesSize();
+		computeRowsSize();
 
 		// TODO: fix the fact that reflow() will reset the scroll window
 
@@ -353,7 +352,7 @@ public class TTable extends TWidget {
 			hScroller.setY(getHeight() - 1);
 			hScroller.setWidth(getWidth() - 1);
 		}
-		hScroller.setRightValue(maxLineWidth - getWidth() + 1);
+		hScroller.setRightValue(maxRowWidth - getWidth() + 1);
 		hScroller.setLeftValue(0);
 		hScroller.setValue(0);
 		if (hScroller.getRightValue() < 0) {
@@ -363,11 +362,11 @@ public class TTable extends TWidget {
 	}
 
 	/**
-	 * Compute {@link TTable#maxLineWidth} and auto column sizes (negative
-	 * values in {@link TTable#columnSizes}).
+	 * Compute {@link TTable#maxRowWidth} and auto column sizes (negative values
+	 * in {@link TTable#columnSizes}).
 	 */
-	private void computeLinesSize() {
-		maxLineWidth = 0;
+	private void computeRowsSize() {
+		maxRowWidth = 0;
 		int visibleColumns = 0;
 		int lastAutoColumn = -1;
 		int lastPositiveColumn = -1;
@@ -378,24 +377,24 @@ public class TTable extends TWidget {
 			}
 
 			if (columnSize > 0) {
-				maxLineWidth += columnSize;
+				maxRowWidth += columnSize;
 				lastPositiveColumn = i;
 			} else if (columnSize < 0) {
 				columnSize = 0;
-				for (int j = -1; j < lines.size(); j++) {
-					List<String> line;
+				for (int j = -1; j < rows.size(); j++) {
+					List<String> row;
 					if (j < 0) {
-						line = headers;
+						row = headers;
 					} else {
-						line = lines.get(j);
+						row = rows.get(j);
 					}
 
 					lastAutoColumn = i;
-					columnSize = Math.min(-line.get(i).length(), columnSize);
+					columnSize = Math.min(-row.get(i).length(), columnSize);
 				}
 
 				columnSizes.set(i, columnSize);
-				maxLineWidth += -columnSize;
+				maxRowWidth += -columnSize;
 			}
 		}
 
@@ -405,22 +404,22 @@ public class TTable extends TWidget {
 		}
 
 		if (visibleColumns > 0) {
-			maxLineWidth += (visibleColumns - 1) * INTER_COL.length();
+			maxRowWidth += (visibleColumns - 1) * INTER_COL.length();
 		}
 
 		// expand last auto col (or last col) to max size
-		if (expandColumn >= 0 && maxLineWidth < getWidth()) {
+		if (expandColumn >= 0 && maxRowWidth < getWidth()) {
 			columnSizes.set(expandColumn, columnSizes.get(expandColumn)
-					- (getWidth() - maxLineWidth));
+					- (getWidth() - maxRowWidth));
 		}
 	}
 
 	/**
-	 * Draw the given line (or an empty one if line is NULL) at the specified
+	 * Draw the given row (or an empty one if row is NULL) at the specified
 	 * index and offset.
 	 * 
-	 * @param line
-	 *            the line to draw
+	 * @param row
+	 *            the row to draw
 	 * @param xOffset
 	 *            the (positive or 0) X offset to apply while drawing
 	 * @param y
@@ -430,15 +429,15 @@ public class TTable extends TWidget {
 	 * @param colorSep
 	 *            the separators colour
 	 */
-	private void drawLine(List<String> line, int xOffset, int y,
+	private void drawRow(List<String> row, int xOffset, int y,
 			CellAttributes color, CellAttributes colorSep) {
 		int x = 0;
 		for (int i = 0; i < columnSizes.size(); i++) {
 			int columnSize = Math.abs(columnSizes.get(i));
 			if (columnSize != 0) {
 				String formatString = "%-" + Integer.toString(columnSize) + "s";
-				String data = String.format(formatString, line == null ? ""
-						: line.get(i));
+				String data = String.format(formatString, row == null ? ""
+						: row.get(i));
 				if (data.length() > xOffset) {
 					data = data.substring(xOffset);
 					getScreen().putStringXY(x, y, data, color);
@@ -469,10 +468,10 @@ public class TTable extends TWidget {
 		int topY = this.topY;
 
 		if (showHeader) {
-			drawLine(headers, hScroller.getValue(), 0, colorHeaders,
+			drawRow(headers, hScroller.getValue(), 0, colorHeaders,
 					colorHeadersSep);
-			// TODO: draw horizontal line? Empty line with seps? blank line?
-			// drawLine(null, hScroller.getValue(), 1, colorHeaders,
+			// TODO: draw horizontal row? Empty row with seps? blank row?
+			// drawRow(null, hScroller.getValue(), 1, colorHeaders,
 			// colorHeadersSep);
 			String formatString = "%-" + Integer.toString(getWidth()) + "s";
 			String data = String.format(formatString, "");
@@ -481,7 +480,7 @@ public class TTable extends TWidget {
 
 		CellAttributes color = null;
 		for (int i = begin; i < size(); i++) {
-			if (i == selectedLine) {
+			if (i == selectedRow) {
 				color = getTheme().getColor("tlist.selected");
 			} else if (isAbsoluteActive()) {
 				color = getTheme().getColor("tlist");
@@ -489,7 +488,7 @@ public class TTable extends TWidget {
 				color = getTheme().getColor("tlist.inactive");
 			}
 
-			drawLine(lines.get(i), hScroller.getValue(), topY, color, colorSep);
+			drawRow(rows.get(i), hScroller.getValue(), topY, color, colorSep);
 			topY++;
 			if (topY >= getHeight() - 1) {
 				break;
@@ -502,7 +501,7 @@ public class TTable extends TWidget {
 			color = getTheme().getColor("tlist.inactive");
 		}
 
-		// Pad the rest with blank lines
+		// Pad the rest with blank rows
 		for (int i = topY; i < getHeight() - 1; i++) {
 			getScreen().hLineXY(0, i, getWidth() - 1, ' ', color);
 		}
@@ -521,7 +520,7 @@ public class TTable extends TWidget {
 
 		if ((mouse.getX() < getWidth() - 1) && (mouse.getY() < getHeight() - 1)) {
 			if (vScroller.getValue() + mouse.getY() < size()) {
-				selectedLine = vScroller.getValue() + mouse.getY() - topY;
+				selectedRow = vScroller.getValue() + mouse.getY() - topY;
 			}
 			dispatchEnter();
 			return;
@@ -542,72 +541,72 @@ public class TTable extends TWidget {
 			hScroller.increment();
 		} else if (keypress.equals(kbUp)) {
 			if (size() > 0) {
-				if (selectedLine >= 0) {
-					if (selectedLine > 0) {
-						if (selectedLine - vScroller.getValue() == 0) {
+				if (selectedRow >= 0) {
+					if (selectedRow > 0) {
+						if (selectedRow - vScroller.getValue() == 0) {
 							vScroller.decrement();
 						}
-						selectedLine--;
+						selectedRow--;
 					}
 				} else {
-					selectedLine = size() - 1;
+					selectedRow = size() - 1;
 				}
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbDown)) {
 			if (size() > 0) {
-				if (selectedLine >= 0) {
-					if (selectedLine < size() - 1) {
-						selectedLine++;
-						if (selectedLine + topY + 1 - vScroller.getValue() == getHeight() - 1) {
+				if (selectedRow >= 0) {
+					if (selectedRow < size() - 1) {
+						selectedRow++;
+						if (selectedRow + topY + 1 - vScroller.getValue() == getHeight() - 1) {
 							vScroller.increment();
 						}
 					}
 				} else {
-					selectedLine = 0;
+					selectedRow = 0;
 				}
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbPgUp)) {
 			vScroller.bigDecrement();
-			if (selectedLine >= 0) {
-				selectedLine -= getHeight() - 1;
-				if (selectedLine < 0) {
-					selectedLine = 0;
+			if (selectedRow >= 0) {
+				selectedRow -= getHeight() - 1;
+				if (selectedRow < 0) {
+					selectedRow = 0;
 				}
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbPgDn)) {
 			vScroller.bigIncrement();
-			if (selectedLine >= 0) {
-				selectedLine += getHeight() - 1;
-				if (selectedLine > size() - 1) {
-					selectedLine = size() - 1;
+			if (selectedRow >= 0) {
+				selectedRow += getHeight() - 1;
+				if (selectedRow > size() - 1) {
+					selectedRow = size() - 1;
 				}
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbHome)) {
 			vScroller.toTop();
 			if (size() > 0) {
-				selectedLine = 0;
+				selectedRow = 0;
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbEnd)) {
 			vScroller.toBottom();
 			if (size() > 0) {
-				selectedLine = size() - 1;
+				selectedRow = size() - 1;
 			}
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchMove();
 			}
 		} else if (keypress.equals(kbTab)) {
@@ -615,7 +614,7 @@ public class TTable extends TWidget {
 		} else if (keypress.equals(kbShiftTab) || keypress.equals(kbBackTab)) {
 			getParent().switchWidget(false);
 		} else if (keypress.equals(kbEnter)) {
-			if (selectedLine >= 0) {
+			if (selectedRow >= 0) {
 				dispatchEnter();
 			}
 		} else {
