@@ -87,11 +87,6 @@ public class TWindow extends TWidget {
      * Window is centered (default no).
      */
     public static final int CENTERED    = 0x04;
-    
-    /**
-     * Window cannot be closed (default no, can be closed).
-     */
-    public static final int UNCLOSABLE  = 0x08;
 
     /**
      * Window has no close box (default no).  Window can still be closed via
@@ -115,6 +110,11 @@ public class TWindow extends TWidget {
      * rather than TApplication.closeWindow() (default no).
      */
     public static final int HIDEONCLOSE = 0x40;
+    
+    /**
+     * Window cannot be closed (default no, can be closed).
+     */
+    public static final int UNCLOSABLE  = 0x80;
 
     // ------------------------------------------------------------------------
     // Variables --------------------------------------------------------------
