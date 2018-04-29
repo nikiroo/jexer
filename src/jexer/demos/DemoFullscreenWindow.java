@@ -11,10 +11,4 @@ public class DemoFullscreenWindow extends TWindow {
 		addLabel("Exit: ALT + X", 4, 4);
 		maximize();
 	}
-
-	@Override
-	public void onResize(TResizeEvent resize) {
-		super.onResize(resize);
-		maximize();
-	}
 }
