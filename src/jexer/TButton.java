@@ -86,7 +86,7 @@ public class TButton extends TWidget {
         // Set parent and window
         super(parent);
 
-        mnemonic = new MnemonicString(text);
+        setText(text);
 
         setX(x);
         setY(y);
@@ -263,6 +263,18 @@ public class TButton extends TWidget {
     public MnemonicString getMnemonic() {
         return mnemonic;
     }
+    
+	/**
+	 * Change the button's text.
+	 * <p>
+	 * Will actually create a new {@link MnemonicString}.
+	 * 
+	 * @param text
+	 *            the new text
+	 */
+	public void setText(String text) {
+		mnemonic = new MnemonicString(text);
+	}
 
     /**
      * Act as though the button was pressed.  This is useful for other UI

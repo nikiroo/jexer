@@ -149,4 +149,11 @@ public class TLabel extends TWidget {
         this.label = label;
     }
 
+    public String getColorKey() {
+    	return colorKey;
+    }
+    
+    public void setColorKey(String colorKey) {
+    	this.colorKey = colorKey;
+    }
 }
