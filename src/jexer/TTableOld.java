@@ -26,7 +26,7 @@ import jexer.event.TResizeEvent;
  * 
  * @author niki
  */
-public class TTable extends TWidget {
+public class TTableOld extends TWidget {
 	private List<String> headers;
 	private List<Integer> columnSizes;
 	private boolean showHeader;
@@ -55,7 +55,7 @@ public class TTable extends TWidget {
 	private TAction moveAction = null;
 
 	/**
-	 * Create a new {@link TTable}.
+	 * Create a new {@link TTableOld}.
 	 * 
 	 * @param parent
 	 *            the parent widget
@@ -64,21 +64,21 @@ public class TTable extends TWidget {
 	 * @param y
 	 *            the Y position
 	 * @param width
-	 *            the width of the {@link TTable}
+	 *            the width of the {@link TTableOld}
 	 * @param height
-	 *            the height of the {@link TTable}
+	 *            the height of the {@link TTableOld}
 	 * @param enterAction
 	 *            an action to call when a cell is selected
 	 * @param moveAction
 	 *            an action to call when the currently active cell is changed
 	 */
-	public TTable(TWidget parent, int x, int y, int width, int height,
+	public TTableOld(TWidget parent, int x, int y, int width, int height,
 			final TAction enterAction, final TAction moveAction) {
 		this(parent, x, y, width, height, enterAction, moveAction, null, false);
 	}
 
 	/**
-	 * Create a new {@link TTable}.
+	 * Create a new {@link TTableOld}.
 	 * 
 	 * @param parent
 	 *            the parent widget
@@ -87,19 +87,19 @@ public class TTable extends TWidget {
 	 * @param y
 	 *            the Y position
 	 * @param width
-	 *            the width of the {@link TTable}
+	 *            the width of the {@link TTableOld}
 	 * @param height
-	 *            the height of the {@link TTable}
+	 *            the height of the {@link TTableOld}
 	 * @param enterAction
 	 *            an action to call when a cell is selected
 	 * @param moveAction
 	 *            an action to call when the currently active cell is changed
 	 * @param headers
-	 *            the headers of the {@link TTable}
+	 *            the headers of the {@link TTableOld}
 	 * @param showHeaders
 	 *            TRUE to show the headers on screen
 	 */
-	public TTable(TWidget parent, int x, int y, int width, int height,
+	public TTableOld(TWidget parent, int x, int y, int width, int height,
 			final TAction enterAction, final TAction moveAction,
 			List<String> headers, boolean showHeaders) {
 		super(parent, x, y, width, height);
@@ -181,7 +181,7 @@ public class TTable extends TWidget {
 	/**
 	 * The currently selected row (or -1 if no row is selected).
 	 * <p>
-	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflow()} when done to see the
 	 * changes.
 	 * 
 	 * @param selectedRow
@@ -209,7 +209,7 @@ public class TTable extends TWidget {
 	/**
 	 * The currently selected column (or -1 if no column is selected).
 	 * <p>
-	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflow()} when done to see the
 	 * changes.
 	 * 
 	 * @param selectedColumn
@@ -262,7 +262,7 @@ public class TTable extends TWidget {
 	 * Note that if some data is present, the number of columns <b>MUST</b> be
 	 * identical.
 	 * <p>
-	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflow()} when done to see the
 	 * changes.
 	 * 
 	 * @param row
@@ -308,11 +308,11 @@ public class TTable extends TWidget {
 	}
 
 	/**
-	 * Clear the content of the {@link TTable}.
+	 * Clear the content of the {@link TTableOld}.
 	 * <p>
 	 * It will not affect the headers.
 	 * <p>
-	 * You may want to call {@link TTable#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflow()} when done to see the
 	 * changes.
 	 */
 	public void clear() {
@@ -362,8 +362,8 @@ public class TTable extends TWidget {
 	}
 
 	/**
-	 * Compute {@link TTable#maxRowWidth} and auto column sizes (negative values
-	 * in {@link TTable#columnSizes}).
+	 * Compute {@link TTableOld#maxRowWidth} and auto column sizes (negative values
+	 * in {@link TTableOld#columnSizes}).
 	 */
 	private void computeRowsSize() {
 		maxRowWidth = 0;
