@@ -1,6 +1,31 @@
 Jexer Work Log
 ==============
 
+October 26, 2018
+
+For those watching Jexer on GitHub, some news.
+
+First, Jexer's code repository will be moving to GitLab in the next
+3-6 months.  Development is active again, but happening in a private
+repo for now.
+
+Second, a release will be coming sometime in 2019.  This will feature
+LOTS of bug fixes, a couple more widgets, i18n/l10n ready, and will
+also be published on Maven.  The GitLab repo will go public, and the
+GitHub repo will be deleted.
+
+Next year's release will also mark Jexer's transition from "alpha"
+(the API can change at anytime, expect lots of breakage) to "beta"
+(API will not change, mostly feature complete, need help from others
+to find more defects).
+
+I am currently unsure what I want to do with Jexer after the Maven
+release.  My real life is drifting away from public open source as a
+hobby.  (To be blunt, I still enjoy writing code, but I am finding
+myself less interested in sharing it.)  I will likely keep the issue
+tracker open to collect reports, but might not enable pull requests.
+We will see how I feel when the time comes.
+
 July 13, 2018
 
 This project isn't dead, I swear!
