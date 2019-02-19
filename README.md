@@ -1,6 +1,38 @@
 Jexer - Java Text User Interface library
 ========================================
 
+ANNOUNCEMENT: JEXER IS MOVING!
+------------------------------
+
+Hello GitHub users.  Jexer's new official home is over at
+[GitLab](https://gitlab.com/klamonte/jexer) at
+https://gitlab.com/klamonte/jexer .
+
+Where have I been the last 18 months?  Well, besides being VERY busy
+in my personal life, I did manage to get some bugs fixed, and a neat
+new feature: image support, including in Xterm via sixel:
+
+![Sixel image support](/screenshots/sixel_many_images.png?raw=true "Sixel image support in Xterm backend")
+
+I also have crossed the halfway point to developing a new text-based
+IDE for Java.  It is still pre-alpha, missing lots, but I think it is
+starting to show its heart now.  Alpha release coming sometime in 2019
+(I hope): the [Tranquil Java IDE:](https://gitlab.com/klamonte/tjide)
+
+![Tranquil Java IDE](/screenshots/tjide.png?raw=true "Tranquil Java IDE")
+
+I am preparing Jexer's next release over the next few weeks.  This one
+will finally be going up on Maven.
+
+Thanks for checking things out.  Happy programming!
+
+
+
+OLD README BELOW HERE
+---------------------
+
+
+
 This library implements a text-based windowing system reminiscient of
 Borland's [Turbo Vision](http://en.wikipedia.org/wiki/Turbo_Vision)
 system.  (For those wishing to use the actual C++ Turbo Vision
