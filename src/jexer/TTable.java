@@ -1,3 +1,31 @@
+/*
+ * Jexer - Java Text User Interface
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (C) 2019 David "Niki" ROULET
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * @author David ROULET [niki@nikiroo.be]
+ * @version 1
+ */
 package jexer;
 
 import java.util.ArrayList;
@@ -9,6 +37,14 @@ import javax.swing.table.TableModel;
 
 import jexer.TTableSimpleTextCellRenderer.CellRendererMode;
 
+/**
+ * A {@link TTable} is a table you can navigate into; you can select an item
+ * then 'execute' it by pressing ENTER with the keyboard or with a mouse click.
+ * <p>
+ * It consists of rows of items, with an optional header row.
+ * 
+ * @author niki
+ */
 public class TTable extends TScrollableWidget {
 	static private TTableCellRenderer defaultCellRenderer = new TTableSimpleTextCellRenderer(
 			CellRendererMode.NORMAL);
@@ -18,7 +54,8 @@ public class TTable extends TScrollableWidget {
 			CellRendererMode.HEADER);
 
 	/**
-	 * The action to perform when the user selects an item (clicks or enter).
+	 * The action to perform when the user selects an item (mouse click or
+	 * enter).
 	 */
 	private TAction enterAction = null;
 
@@ -35,7 +72,8 @@ public class TTable extends TScrollableWidget {
 	private List<List<TWidget>> rows = new ArrayList<List<TWidget>>();
 	private List<List<TWidget>> separators = new ArrayList<List<TWidget>>();
 
-	private int headerSize = 2; // in lines (rows), def is 2
+	/** The size of the header, in rows (default is 2). */
+	private int headerSize = 2;
 
 	/**
 	 * Create a new {@link TTable}.
@@ -113,19 +151,53 @@ public class TTable extends TScrollableWidget {
 		}
 	}
 
+	/**
+	 * The data model behind this {@link TTable}, as with the usual Swing
+	 * tables.
+	 * 
+	 * @return the model
+	 */
 	public TableModel getModel() {
 		return model;
 	}
 
+	/**
+	 * The data model behind this {@link TTable}, as with the usual Swing
+	 * tables.
+	 * <p>
+	 * Will reset all the rendering cells.
+	 * 
+	 * @param model
+	 *            the new model
+	 */
 	public void setModel(TableModel model) {
 		this.model = model;
 		resetData();
 	}
 
+	/**
+	 * Set the data and create a new {@link TTableSimpleTextModel} for them.
+	 * 
+	 * @param data
+	 *            the data to set into this table, as an array of rows, that is,
+	 *            an array of arrays of values
+	 * @param names
+	 *            the optional names of the column (can be NULL)
+	 */
+
 	public void setRowData(Object[][] data, Object[] names) {
 		setRowData(TTableSimpleTextModel.convert(data), Arrays.asList(names));
 	}
 
+	/**
+	 * Set the data and create a new {@link TTableSimpleTextModel} for them.
+	 * 
+	 * @param data
+	 *            the data to set into this table, as a collection of rows, that
+	 *            is, a collection of collections of values
+	 * @param names
+	 *            the optional names of the column (can be NULL)
+	 */
 	public void setRowData(
 			final Collection<? extends Collection<? extends Object>> data,
 			final Collection<Object> names) {
@@ -147,6 +219,10 @@ public class TTable extends TScrollableWidget {
 		setModel(model);
 	}
 
+	/**
+	 * Delete all the cells and force their recreation (note: some cells can be
+	 * NULL after creation, this is allowed; we can render NULL cells).
+	 */
 	private void resetData() {
 		for (List<TWidget> row : rows) {
 			for (TWidget col : row) {
@@ -182,6 +258,10 @@ public class TTable extends TScrollableWidget {
 		reflow();
 	}
 
+	/**
+	 * Loop through all the cells and update their values (which can result in
+	 * new {@link TWidget}s being created and old one discarded).
+	 */
 	private void reflow() {
 		int numOfRows = rows.size();
 		int numOfCols = columns.size();
@@ -243,7 +323,34 @@ public class TTable extends TScrollableWidget {
 		}
 	}
 
-	// update data and make sure widget is added to 'this' (if not null)
+	/**
+	 * Update and/or (re)create the cell with the new data.
+	 * <p>
+	 * The resulting {@link TWidget}, if not NULL, will always be a child of
+	 * 'this' (i.e., we will add it to 'this' if needed).
+	 * 
+	 * @param widgets
+	 *            the list of widgets
+	 * @param rowIndex
+	 *            the row index
+	 * @param colIndex
+	 *            the column index
+	 * @param renderer
+	 *            the renderer to use to display the value
+	 * @param currentX
+	 *            the current X position
+	 * @param yOffset
+	 *            the Y offset
+	 * @param value
+	 *            the new value to display
+	 * @param isSelected
+	 *            TRUE if the cell is selected
+	 * @param hasFocus
+	 *            TRUE if the cell has focus
+	 * 
+	 * @return the resulting {@link TWidget} (can be the same as before, can be
+	 *         NULL, can be a new one; will always be a child of 'this')
+	 */
 	private TWidget updateData(List<List<TWidget>> widgets, int rowIndex,
 			int colIndex, TTableCellRenderer renderer, int currentX,
 			int yOffset, Object value, boolean isSelected, boolean hasFocus) {
