@@ -8,7 +8,8 @@ public class Demo9 {
 		try {
 			TApplication app = new TApplication(backend(null)) {
 				{
-					new DemoTTable(this);
+					new DemoTTable(this, true);
+					new DemoTTable(this, false);
 					addFileMenu();
 					addWindowMenu();
 				}

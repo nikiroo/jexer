@@ -1,24 +1,9 @@
 package jexer;
 
-import static jexer.TKeypress.kbBackTab;
-import static jexer.TKeypress.kbDown;
-import static jexer.TKeypress.kbEnd;
-import static jexer.TKeypress.kbEnter;
-import static jexer.TKeypress.kbHome;
-import static jexer.TKeypress.kbLeft;
-import static jexer.TKeypress.kbPgDn;
-import static jexer.TKeypress.kbPgUp;
-import static jexer.TKeypress.kbRight;
-import static jexer.TKeypress.kbShiftTab;
-import static jexer.TKeypress.kbTab;
-import static jexer.TKeypress.kbUp;
-
 import java.util.ArrayList;
 import java.util.List;
 
 import jexer.bits.CellAttributes;
-import jexer.event.TKeypressEvent;
-import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
 
 /**
@@ -26,13 +11,12 @@ import jexer.event.TResizeEvent;
  * 
  * @author niki
  */
-public class TTableOld extends TWidget {
+public class TTableOld extends TBrowsableWidget {
 	private List<String> headers;
 	private List<Integer> columnSizes;
 	private boolean showHeader;
 
 	private List<List<String>> rows;
-	private int selectedRow;
 	private int selectedColumn;
 
 	private int maxRowWidth;
@@ -40,9 +24,6 @@ public class TTableOld extends TWidget {
 
 	// some nice characters: ┃ │ |
 	private final String INTER_COL = " │ ";
-
-	private THScroller hScroller;
-	private TVScroller vScroller;
 
 	/**
 	 * The action to perform when the user selects an item (clicks or enter).
@@ -105,7 +86,7 @@ public class TTableOld extends TWidget {
 		super(parent, x, y, width, height);
 
 		this.rows = new ArrayList<List<String>>();
-		this.selectedRow = -1;
+		setSelectedRow(-1);
 		this.selectedColumn = -1;
 
 		setHeaders(headers, showHeaders);
@@ -113,7 +94,7 @@ public class TTableOld extends TWidget {
 		this.enterAction = enterAction;
 		this.moveAction = moveAction;
 
-		reflow();
+		reflowData();
 	}
 
 	/**
@@ -171,22 +152,14 @@ public class TTableOld extends TWidget {
 
 	/**
 	 * The currently selected row (or -1 if no row is selected).
-	 * 
-	 * @return the selected row
-	 */
-	public int getSelectedRow() {
-		return selectedRow;
-	}
-
-	/**
-	 * The currently selected row (or -1 if no row is selected).
 	 * <p>
-	 * You may want to call {@link TTableOld#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflowData()} when done to see the
 	 * changes.
 	 * 
 	 * @param selectedRow
 	 *            the selected row
 	 */
+	@Override
 	public void setSelectedRow(int selectedRow) {
 		if (selectedRow < -1 || selectedRow >= getNumberOfRows()) {
 			throw new IndexOutOfBoundsException(String.format(
@@ -194,7 +167,7 @@ public class TTableOld extends TWidget {
 					getNumberOfRows()));
 		}
 
-		this.selectedRow = selectedRow;
+		super.setSelectedRow(selectedRow);
 	}
 
 	/**
@@ -209,7 +182,7 @@ public class TTableOld extends TWidget {
 	/**
 	 * The currently selected column (or -1 if no column is selected).
 	 * <p>
-	 * You may want to call {@link TTableOld#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflowData()} when done to see the
 	 * changes.
 	 * 
 	 * @param selectedColumn
@@ -231,6 +204,7 @@ public class TTableOld extends TWidget {
 	 * @return the cell
 	 */
 	public String getSelectedCell() {
+		int selectedRow = getSelectedRow();
 		if (selectedRow >= 0 && selectedColumn >= 0) {
 			return rows.get(selectedRow).get(selectedColumn);
 		}
@@ -238,19 +212,17 @@ public class TTableOld extends TWidget {
 		return null;
 	}
 
-	/**
-	 * Perform user selection action.
-	 */
-	public void dispatchEnter() {
+	@Override
+	public void dispatchEnter(int selectedRow) {
+		super.dispatchEnter(selectedRow);
 		if (enterAction != null) {
 			enterAction.DO();
 		}
 	}
 
-	/**
-	 * Perform list movement action.
-	 */
-	public void dispatchMove() {
+	@Override
+	public void dispatchMove(int fromRow, int toRow) {
+		super.dispatchMove(fromRow, toRow);
 		if (moveAction != null) {
 			moveAction.DO();
 		}
@@ -262,7 +234,7 @@ public class TTableOld extends TWidget {
 	 * Note that if some data is present, the number of columns <b>MUST</b> be
 	 * identical.
 	 * <p>
-	 * You may want to call {@link TTableOld#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflowData()} when done to see the
 	 * changes.
 	 * 
 	 * @param row
@@ -294,6 +266,7 @@ public class TTableOld extends TWidget {
 	 * 
 	 * @return the number of rows
 	 */
+	@Override
 	public int getNumberOfRows() {
 		return rows.size();
 	}
@@ -312,11 +285,11 @@ public class TTableOld extends TWidget {
 	 * <p>
 	 * It will not affect the headers.
 	 * <p>
-	 * You may want to call {@link TTableOld#reflow()} when done to see the
+	 * You may want to call {@link TTableOld#reflowData()} when done to see the
 	 * changes.
 	 */
 	public void clear() {
-		selectedRow = -1;
+		setSelectedRow(-1);
 		selectedColumn = -1;
 		rows.clear();
 	}
@@ -324,46 +297,15 @@ public class TTableOld extends TWidget {
 	/**
 	 * Resize for a new width/height.
 	 */
-	public void reflow() {
+	@Override
+	public void reflowData() {
+		super.reflowData();
 		computeRowsSize();
-
-		// TODO: fix the fact that reflow() will reset the scroll window
-
-		// Start at the top
-		if (vScroller == null) {
-			vScroller = new TVScroller(this, getWidth() - 1, topY, getHeight()
-					- topY - 1);
-		} else {
-			vScroller.setX(getWidth() - 1);
-			vScroller.setHeight(getHeight() - topY - 1);
-		}
-		vScroller.setBottomValue(size() - getHeight() - topY + 1);
-		vScroller.setTopValue(0);
-		vScroller.setValue(0);
-		if (vScroller.getBottomValue() < 0) {
-			vScroller.setBottomValue(0);
-		}
-		vScroller.setBigChange(getHeight() - 1 - topY);
-
-		// Start at the left
-		if (hScroller == null) {
-			hScroller = new THScroller(this, 0, getHeight() - 1, getWidth() - 1);
-		} else {
-			hScroller.setY(getHeight() - 1);
-			hScroller.setWidth(getWidth() - 1);
-		}
-		hScroller.setRightValue(maxRowWidth - getWidth() + 1);
-		hScroller.setLeftValue(0);
-		hScroller.setValue(0);
-		if (hScroller.getRightValue() < 0) {
-			hScroller.setRightValue(0);
-		}
-		hScroller.setBigChange(getWidth() - 1);
 	}
 
 	/**
-	 * Compute {@link TTableOld#maxRowWidth} and auto column sizes (negative values
-	 * in {@link TTableOld#columnSizes}).
+	 * Compute {@link TTableOld#maxRowWidth} and auto column sizes (negative
+	 * values in {@link TTableOld#columnSizes}).
 	 */
 	private void computeRowsSize() {
 		maxRowWidth = 0;
@@ -479,6 +421,7 @@ public class TTableOld extends TWidget {
 		}
 
 		CellAttributes color = null;
+		int selectedRow = getSelectedRow();
 		for (int i = begin; i < size(); i++) {
 			if (i == selectedRow) {
 				color = getTheme().getColor("tlist.selected");
@@ -505,127 +448,5 @@ public class TTableOld extends TWidget {
 		for (int i = topY; i < getHeight() - 1; i++) {
 			getScreen().hLineXY(0, i, getWidth() - 1, ' ', color);
 		}
-	}
-
-	@Override
-	public void onMouseDown(final TMouseEvent mouse) {
-		if (mouse.isMouseWheelUp()) {
-			vScroller.decrement();
-			return;
-		}
-		if (mouse.isMouseWheelDown()) {
-			vScroller.increment();
-			return;
-		}
-
-		if ((mouse.getX() < getWidth() - 1) && (mouse.getY() < getHeight() - 1)) {
-			if (vScroller.getValue() + mouse.getY() < size()) {
-				selectedRow = vScroller.getValue() + mouse.getY() - topY;
-			}
-			dispatchEnter();
-			return;
-		}
-
-		// Pass to children
-		super.onMouseDown(mouse);
-	}
-
-	@Override
-	public void onKeypress(final TKeypressEvent keypress) {
-		// TODO: could be exported to a base class allowing internal right(int
-		// count), left(int count)...
-		// TODO 2: left/right to switch column?
-		if (keypress.equals(kbLeft)) {
-			hScroller.decrement();
-		} else if (keypress.equals(kbRight)) {
-			hScroller.increment();
-		} else if (keypress.equals(kbUp)) {
-			if (size() > 0) {
-				if (selectedRow >= 0) {
-					if (selectedRow > 0) {
-						if (selectedRow - vScroller.getValue() == 0) {
-							vScroller.decrement();
-						}
-						selectedRow--;
-					}
-				} else {
-					selectedRow = size() - 1;
-				}
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbDown)) {
-			if (size() > 0) {
-				if (selectedRow >= 0) {
-					if (selectedRow < size() - 1) {
-						selectedRow++;
-						if (selectedRow + topY + 1 - vScroller.getValue() == getHeight() - 1) {
-							vScroller.increment();
-						}
-					}
-				} else {
-					selectedRow = 0;
-				}
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbPgUp)) {
-			vScroller.bigDecrement();
-			if (selectedRow >= 0) {
-				selectedRow -= getHeight() - 1;
-				if (selectedRow < 0) {
-					selectedRow = 0;
-				}
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbPgDn)) {
-			vScroller.bigIncrement();
-			if (selectedRow >= 0) {
-				selectedRow += getHeight() - 1;
-				if (selectedRow > size() - 1) {
-					selectedRow = size() - 1;
-				}
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbHome)) {
-			vScroller.toTop();
-			if (size() > 0) {
-				selectedRow = 0;
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbEnd)) {
-			vScroller.toBottom();
-			if (size() > 0) {
-				selectedRow = size() - 1;
-			}
-			if (selectedRow >= 0) {
-				dispatchMove();
-			}
-		} else if (keypress.equals(kbTab)) {
-			getParent().switchWidget(true);
-		} else if (keypress.equals(kbShiftTab) || keypress.equals(kbBackTab)) {
-			getParent().switchWidget(false);
-		} else if (keypress.equals(kbEnter)) {
-			if (selectedRow >= 0) {
-				dispatchEnter();
-			}
-		} else {
-			// Pass other keys (tab etc.) on
-			super.onKeypress(keypress);
-		}
-	}
-
-	@Override
-	public void onResize(TResizeEvent resize) {
-		super.onResize(resize);
-		reflow();
 	}
 }

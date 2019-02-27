@@ -40,6 +40,7 @@ package jexer;
 public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
 	private boolean separator;
 	private boolean header;
+	private boolean rightAlign;
 
 	/**
 	 * The simple renderer mode.
@@ -69,25 +70,37 @@ public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
 	 *            the renderer mode
 	 */
 	public TTableSimpleTextCellRenderer(CellRendererMode mode) {
+		this(mode, false);
+	}
+
+	/**
+	 * Create a new renderer of the given mode.
+	 * 
+	 * @param mode
+	 *            the renderer mode
+	 */
+	public TTableSimpleTextCellRenderer(CellRendererMode mode,
+			boolean rightAlign) {
 		separator = mode == CellRendererMode.SEPARATOR;
 		header = mode == CellRendererMode.HEADER;
+		this.rightAlign = rightAlign;
 	}
 
 	@Override
 	public TWidget getTableCellRendererComponent(TTable table, Object value,
-			boolean isSelected, boolean hasFocus, int row, int column) {
-		return new TLabel(table, getText(value), 0, 0, getColorKey(isSelected,
-				hasFocus), false);
+			boolean isSelected, boolean hasFocus, int row, int column, int width) {
+		return new TLabel(table, getText(value, width), 0, 0, getColorKey(
+				isSelected, hasFocus), false);
 	}
 
 	@Override
 	public boolean updateTableCellRendererComponent(TTable table,
 			TWidget component, Object value, boolean isSelected,
-			boolean hasFocus, int row, int column) {
+			boolean hasFocus, int row, int column, int width) {
 
 		if (component instanceof TLabel) {
 			TLabel widget = (TLabel) component;
-			widget.setLabel(getText(value));
+			widget.setLabel(getText(value, width));
 			widget.setColorKey(getColorKey(isSelected, hasFocus));
 			return true;
 		}
@@ -101,16 +114,31 @@ public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
 	 * 
 	 * @param value
 	 *            the value to get the text of
+	 * @param width
+	 *            the width we should tale
 	 * 
 	 * @return the {@link String} to display
 	 */
-	protected String getText(Object value) {
+	protected String getText(Object value, int width) {
 		if (separator) {
-			// some nice characters: ┃ │ |
+			// some nice characters for the separator: ┃ │ |
 			return " │ ";
 		}
 
-		return "" + value;
+		if (width <= 0) {
+			return "";
+		}
+
+		String format;
+		if (!rightAlign) {
+			// Left align
+			format = "%-" + width + "s";
+		} else {
+			// right align
+			format = "%" + width + "s";
+		}
+
+		return String.format(format, value);
 	}
 
 	/**
@@ -131,6 +159,8 @@ public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
 		String colorKey = "tlist";
 		if (isSelected) {
 			colorKey += ".selected";
+		} else if (!hasFocus) {
+			colorKey += ".inactive";
 		}
 
 		return colorKey;

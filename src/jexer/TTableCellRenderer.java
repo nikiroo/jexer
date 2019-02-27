@@ -51,11 +51,13 @@ public interface TTableCellRenderer {
 	 *            the row index in the table
 	 * @param column
 	 *            the column index in the table
+	 * @param width
+	 *            the width we are supposed to take
 	 * 
 	 * @return
 	 */
 	public TWidget getTableCellRendererComponent(TTable table, Object value,
-			boolean isSelected, boolean hasFocus, int row, int column);
+			boolean isSelected, boolean hasFocus, int row, int column, int width);
 
 	/**
 	 * Update the given {@link TWidget} component for the given cell if
@@ -78,6 +80,8 @@ public interface TTableCellRenderer {
 	 *            the row index in the table
 	 * @param column
 	 *            the column index in the table
+	 * @param width
+	 *            the width we are supposed to take
 	 * 
 	 * @return TRUE if the component has been updated and can be kept, FALSE if
 	 *         it must be discarded (a new one will be created via
@@ -86,5 +90,5 @@ public interface TTableCellRenderer {
 	 */
 	public boolean updateTableCellRendererComponent(TTable table,
 			TWidget component, Object value, boolean isSelected,
-			boolean hasFocus, int row, int column);
+			boolean hasFocus, int row, int column, int width);
 }

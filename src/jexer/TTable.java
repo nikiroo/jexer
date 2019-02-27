@@ -36,6 +36,7 @@ import java.util.List;
 import javax.swing.table.TableModel;
 
 import jexer.TTableSimpleTextCellRenderer.CellRendererMode;
+import jexer.event.TResizeEvent;
 
 /**
  * A {@link TTable} is a table you can navigate into; you can select an item
@@ -45,7 +46,7 @@ import jexer.TTableSimpleTextCellRenderer.CellRendererMode;
  * 
  * @author niki
  */
-public class TTable extends TScrollableWidget {
+public class TTable extends TBrowsableWidget {
 	static private TTableCellRenderer defaultCellRenderer = new TTableSimpleTextCellRenderer(
 			CellRendererMode.NORMAL);
 	static private TTableCellRenderer defaultSeparatorRenderer = new TTableSimpleTextCellRenderer(
@@ -152,6 +153,49 @@ public class TTable extends TScrollableWidget {
 	}
 
 	/**
+	 * The number of rows.
+	 * 
+	 * @return the number of rows
+	 */
+	@Override
+	public int getNumberOfRows() {
+		return rows.size();
+	}
+
+	/**
+	 * The number of columns.
+	 * 
+	 * @return the number of columns
+	 */
+	public int getNumberOfColumns() {
+		return headers.size();
+	}
+
+	/**
+	 * Perform user selection action.
+	 */
+	@Override
+	public void dispatchEnter(int selectedRow) {
+		super.dispatchEnter(selectedRow);
+		if (enterAction != null) {
+			enterAction.DO();
+		}
+	}
+
+	/**
+	 * Perform list movement action.
+	 */
+	@Override
+	public void dispatchMove(int fromRow, int toRow) {
+		super.dispatchMove(fromRow, toRow);
+		reflow(fromRow, fromRow);
+		reflow(toRow, toRow);
+		if (moveAction != null) {
+			moveAction.DO();
+		}
+	}
+
+	/**
 	 * The data model behind this {@link TTable}, as with the usual Swing
 	 * tables.
 	 * 
@@ -200,7 +244,7 @@ public class TTable extends TScrollableWidget {
 	 */
 	public void setRowData(
 			final Collection<? extends Collection<? extends Object>> data,
-			final Collection<Object> names) {
+			final Collection<? extends Object> names) {
 
 		TableModel model = new TTableSimpleTextModel(data);
 
@@ -220,8 +264,9 @@ public class TTable extends TScrollableWidget {
 	}
 
 	/**
-	 * Delete all the cells and force their recreation (note: some cells can be
-	 * NULL after creation, this is allowed; we can render NULL cells).
+	 * Delete all the cells and force their recreation if visible (note: some
+	 * cells can be NULL after creation, this is allowed; we can render NULL
+	 * cells).
 	 */
 	private void resetData() {
 		for (List<TWidget> row : rows) {
@@ -255,17 +300,29 @@ public class TTable extends TScrollableWidget {
 			separators.add(seps);
 		}
 
-		reflow();
+		reflowData();
 	}
 
 	/**
 	 * Loop through all the cells and update their values (which can result in
 	 * new {@link TWidget}s being created and old one discarded).
 	 */
-	private void reflow() {
-		int numOfRows = rows.size();
+	@Override
+	public void reflowData() {
+		super.reflowData();
+		// TODO: only reflow the visible rows
+		reflow(0, rows.size() - 1);
+	}
+
+	/**
+	 * Loop through all the cells of the given rows and update their values
+	 * (which can result in new {@link TWidget}s being created and old one
+	 * discarded).
+	 */
+	private void reflow(int fromRow, int toRow) {
 		int numOfCols = columns.size();
-		for (int rowIndex = -headerSize; rowIndex < numOfRows; rowIndex++) {
+		int selectedRow = getSelectedRow();
+		for (int rowIndex = fromRow - headerSize; rowIndex <= toRow; rowIndex++) {
 			int currentX = 0;
 			for (int displayColIndex = 0; displayColIndex < numOfCols; displayColIndex++) {
 				TTableColumn tcol = columns.get(displayColIndex);
@@ -288,13 +345,13 @@ public class TTable extends TScrollableWidget {
 				if (rowIndex == -1) {
 					Object value = columns.get(colIndex).getHeaderValue();
 					updateData(headers, 0, colIndex, headerRenderer, currentX,
-							0, value, false, false);
+							0, value, false, false, tcol.getWidth());
 					currentX += tcol.getWidth();
 
 					if (displayColIndex + 1 < numOfCols) {
 						TWidget sep = updateData(headers, 1, colIndex,
 								separatorRenderer, currentX, -1, value, false,
-								false);
+								false, 0);
 						if (sep != null) {
 							currentX += sep.getWidth();
 						}
@@ -303,17 +360,18 @@ public class TTable extends TScrollableWidget {
 					// Skip (empty row for headers)
 				} else {
 					Object value = model.getValueAt(rowIndex, colIndex);
-					boolean isSelected = rowIndex == 2; // TODO
-					boolean hasFocus = isSelected;
+					boolean isSelected = (rowIndex == selectedRow);
+					boolean hasFocus = this.isAbsoluteActive();
 
 					updateData(rows, rowIndex, colIndex, cellRenderer,
-							currentX, headerSize, value, isSelected, hasFocus);
+							currentX, headerSize, value, isSelected, hasFocus,
+							tcol.getWidth());
 					currentX += tcol.getWidth();
 
 					if (displayColIndex + 1 < numOfCols) {
 						TWidget sep = updateData(separators, rowIndex,
 								colIndex, separatorRenderer, currentX,
-								headerSize, value, isSelected, hasFocus);
+								headerSize, value, isSelected, hasFocus, 0);
 						if (sep != null) {
 							currentX += sep.getWidth();
 						}
@@ -347,25 +405,28 @@ public class TTable extends TScrollableWidget {
 	 *            TRUE if the cell is selected
 	 * @param hasFocus
 	 *            TRUE if the cell has focus
+	 * @param width
+	 *            the width we can take
 	 * 
 	 * @return the resulting {@link TWidget} (can be the same as before, can be
 	 *         NULL, can be a new one; will always be a child of 'this')
 	 */
 	private TWidget updateData(List<List<TWidget>> widgets, int rowIndex,
 			int colIndex, TTableCellRenderer renderer, int currentX,
-			int yOffset, Object value, boolean isSelected, boolean hasFocus) {
+			int yOffset, Object value, boolean isSelected, boolean hasFocus,
+			int width) {
 
 		TWidget widget = widgets.get(rowIndex).get(colIndex);
 		if (widget != null) {
 			if (!renderer.updateTableCellRendererComponent(this, widget, value,
-					isSelected, hasFocus, rowIndex, colIndex)) {
+					isSelected, hasFocus, rowIndex, colIndex, width)) {
 				removeChild(widget);
 				widget = null;
 			}
 		}
 		if (widget == null) {
 			widget = renderer.getTableCellRendererComponent(this, value,
-					isSelected, hasFocus, rowIndex, colIndex);
+					isSelected, hasFocus, rowIndex, colIndex, width);
 		}
 
 		widgets.get(rowIndex).set(colIndex, widget);
@@ -380,5 +441,11 @@ public class TTable extends TScrollableWidget {
 		}
 
 		return widget;
+	}
+
+	@Override
+	public void onResize(TResizeEvent resize) {
+		super.onResize(resize);
+		reflowData();
 	}
 }
