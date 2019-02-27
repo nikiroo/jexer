@@ -1,10 +1,15 @@
 package jexer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
+import javax.swing.table.TableModel;
+
+import jexer.TTableOldSimpleTextCellRenderer.CellRendererMode;
 import jexer.bits.CellAttributes;
-import jexer.event.TResizeEvent;
+import jexer.bits.ColorTheme;
 
 /**
  * A table widget to display and browse through tabular data.
@@ -16,14 +21,22 @@ public class TTableOld extends TBrowsableWidget {
 	private List<Integer> columnSizes;
 	private boolean showHeader;
 
-	private List<List<String>> rows;
+	private List<TTableColumn> columns = new ArrayList<TTableColumn>();
+	private TableModel model;
+
+	// private List<List<String>> rows;
 	private int selectedColumn;
 
-	private int maxRowWidth;
-	private int topY;
+	static private TTableOldCellRenderer defaultSeparatorRenderer = new TTableOldSimpleTextCellRenderer(
+			CellRendererMode.SEPARATOR);
+	static private TTableOldCellRenderer defaultHeaderRenderer = new TTableOldSimpleTextCellRenderer(
+			CellRendererMode.HEADER);
+	static private TTableOldCellRenderer defaultHeaderSeparatorRenderer = new TTableOldSimpleTextCellRenderer(
+			CellRendererMode.HEADER_SEPARATOR);
 
-	// some nice characters: ┃ │ |
-	private final String INTER_COL = " │ ";
+	private TTableOldCellRenderer separatorRenderer;
+	private TTableOldCellRenderer headerRenderer;
+	private TTableOldCellRenderer headerSeparatorRenderer;
 
 	/**
 	 * The action to perform when the user selects an item (clicks or enter).
@@ -85,7 +98,7 @@ public class TTableOld extends TBrowsableWidget {
 			List<String> headers, boolean showHeaders) {
 		super(parent, x, y, width, height);
 
-		this.rows = new ArrayList<List<String>>();
+		this.model = new TTableSimpleTextModel(new Object[][] {});
 		setSelectedRow(-1);
 		this.selectedColumn = -1;
 
@@ -95,6 +108,41 @@ public class TTableOld extends TBrowsableWidget {
 		this.moveAction = moveAction;
 
 		reflowData();
+	}
+
+	public TableModel getModel() {
+		return model;
+	}
+
+	public List<TTableColumn> getColumns() {
+		return columns;
+	}
+
+	public TTableOldCellRenderer getSeparatorRenderer() {
+		return separatorRenderer != null ? separatorRenderer
+				: defaultSeparatorRenderer;
+	}
+
+	public void setSeparatorRenderer(TTableOldCellRenderer separatorRenderer) {
+		this.separatorRenderer = separatorRenderer;
+	}
+
+	public TTableOldCellRenderer getHeaderRenderer() {
+		return headerRenderer != null ? headerRenderer : defaultHeaderRenderer;
+	}
+
+	public void setHeaderRenderer(TTableOldCellRenderer headerRenderer) {
+		this.headerRenderer = headerRenderer;
+	}
+
+	public TTableOldCellRenderer getHeaderSeparatorRenderer() {
+		return headerSeparatorRenderer != null ? headerSeparatorRenderer
+				: defaultHeaderSeparatorRenderer;
+	}
+
+	public void setHeaderSeparatorRenderer(
+			TTableOldCellRenderer headerSeparatorRenderer) {
+		this.headerSeparatorRenderer = headerSeparatorRenderer;
 	}
 
 	/**
@@ -113,22 +161,16 @@ public class TTableOld extends TBrowsableWidget {
 			headers = new ArrayList<String>();
 		}
 
-		List<String> row = null;
-		if (rows.size() > 0) {
-			row = rows.get(0);
-		}
-
-		if (row != null && row.size() != headers.size()) {
+		if (getColumnCount() != headers.size()) {
 			throw new IllegalArgumentException(
 					String.format(
 							"Cannot set the headers of a table if the number of items is not equals to that of the current data rows: "
 									+ "%d elements in the data rows <> %d elements in the headers",
-							row.size(), headers.size()));
+							getColumnCount(), headers.size()));
 		}
 
 		this.headers = headers;
 		this.showHeader = showHeaders;
-		this.topY = this.showHeader ? 2 : 0;
 		this.columnSizes = new ArrayList<Integer>(headers.size());
 		for (int i = 0; i < headers.size(); i++) {
 			this.columnSizes.add(-1);
@@ -161,10 +203,10 @@ public class TTableOld extends TBrowsableWidget {
 	 */
 	@Override
 	public void setSelectedRow(int selectedRow) {
-		if (selectedRow < -1 || selectedRow >= getNumberOfRows()) {
+		if (selectedRow < -1 || selectedRow >= getRowCount()) {
 			throw new IndexOutOfBoundsException(String.format(
 					"Cannot set row %d on a table with %d rows", selectedRow,
-					getNumberOfRows()));
+					getRowCount()));
 		}
 
 		super.setSelectedRow(selectedRow);
@@ -189,10 +231,10 @@ public class TTableOld extends TBrowsableWidget {
 	 *            the selected column
 	 */
 	public void setSelectedColumn(int selectedColumn) {
-		if (selectedColumn < -1 || selectedColumn >= getNumberOfColumns()) {
+		if (selectedColumn < -1 || selectedColumn >= getColumnCount()) {
 			throw new IndexOutOfBoundsException(String.format(
 					"Cannot set column %d on a table with %d columns",
-					selectedColumn, getNumberOfColumns()));
+					selectedColumn, getColumnCount()));
 		}
 
 		this.selectedColumn = selectedColumn;
@@ -203,10 +245,10 @@ public class TTableOld extends TBrowsableWidget {
 	 * 
 	 * @return the cell
 	 */
-	public String getSelectedCell() {
+	public Object getSelectedCell() {
 		int selectedRow = getSelectedRow();
 		if (selectedRow >= 0 && selectedColumn >= 0) {
-			return rows.get(selectedRow).get(selectedColumn);
+			return model.getValueAt(selectedRow, selectedColumn);
 		}
 
 		return null;
@@ -228,47 +270,9 @@ public class TTableOld extends TBrowsableWidget {
 		}
 	}
 
-	/**
-	 * Add a row to the table.
-	 * <p>
-	 * Note that if some data is present, the number of columns <b>MUST</b> be
-	 * identical.
-	 * <p>
-	 * You may want to call {@link TTableOld#reflowData()} when done to see the
-	 * changes.
-	 * 
-	 * @param row
-	 *            the row to add
-	 */
-	public void addRow(List<String> row) {
-		if (row.size() != headers.size()) {
-			throw new IllegalArgumentException(
-					String.format(
-							"Cannot insert a row in a table if the number of items is not equals to that of the header: "
-									+ "%d elements in the row <> %d elements in the headers",
-							row.size(), headers.size()));
-		}
-
-		rows.add(row);
-	}
-
-	/**
-	 * The size of the table in number of rows.
-	 * 
-	 * @return the size
-	 */
-	public int size() {
-		return getNumberOfRows();
-	}
-
-	/**
-	 * The number of rows.
-	 * 
-	 * @return the number of rows
-	 */
 	@Override
-	public int getNumberOfRows() {
-		return rows.size();
+	public int getRowCount() {
+		return model.getRowCount();
 	}
 
 	/**
@@ -276,8 +280,8 @@ public class TTableOld extends TBrowsableWidget {
 	 * 
 	 * @return the number of columns
 	 */
-	public int getNumberOfColumns() {
-		return headers.size();
+	public int getColumnCount() {
+		return model.getColumnCount();
 	}
 
 	/**
@@ -291,7 +295,65 @@ public class TTableOld extends TBrowsableWidget {
 	public void clear() {
 		setSelectedRow(-1);
 		selectedColumn = -1;
-		rows.clear();
+		setModel(new TTableSimpleTextModel(new Object[][] {}));
+	}
+
+	/**
+	 * The data model behind this {@link TTable}, as with the usual Swing
+	 * tables.
+	 * <p>
+	 * Will reset all the rendering cells.
+	 * 
+	 * @param model
+	 *            the new model
+	 */
+	public void setModel(TableModel model) {
+		this.model = model;
+		reflowData();
+	}
+
+	/**
+	 * Set the data and create a new {@link TTableSimpleTextModel} for them.
+	 * 
+	 * @param data
+	 *            the data to set into this table, as an array of rows, that is,
+	 *            an array of arrays of values
+	 * @param names
+	 *            the optional names of the column (can be NULL)
+	 */
+
+	public void setRowData(Object[][] data, Object[] names) {
+		setRowData(TTableSimpleTextModel.convert(data), Arrays.asList(names));
+	}
+
+	/**
+	 * Set the data and create a new {@link TTableSimpleTextModel} for them.
+	 * 
+	 * @param data
+	 *            the data to set into this table, as a collection of rows, that
+	 *            is, a collection of collections of values
+	 * @param names
+	 *            the optional names of the column (can be NULL)
+	 */
+	public void setRowData(
+			final Collection<? extends Collection<? extends Object>> data,
+			final Collection<? extends Object> names) {
+
+		TableModel model = new TTableSimpleTextModel(data);
+
+		String[] onames;
+		if (names != null) {
+			onames = names.toArray(new String[] {});
+		} else {
+			onames = new String[model.getColumnCount()];
+		}
+
+		columns.clear();
+		for (int i = 0; i < onames.length; i++) {
+			columns.add(new TTableColumn(i, onames[i], model));
+		}
+
+		setModel(model);
 	}
 
 	/**
@@ -300,59 +362,47 @@ public class TTableOld extends TBrowsableWidget {
 	@Override
 	public void reflowData() {
 		super.reflowData();
-		computeRowsSize();
+		computeRowsSize(true);
 	}
 
 	/**
 	 * Compute {@link TTableOld#maxRowWidth} and auto column sizes (negative
 	 * values in {@link TTableOld#columnSizes}).
+	 * 
+	 * @param forceReflowCol
+	 *            TRUE to force a reflow of the size on each column, too
 	 */
-	private void computeRowsSize() {
-		maxRowWidth = 0;
-		int visibleColumns = 0;
+	private void computeRowsSize(boolean forceReflowCol) {
 		int lastAutoColumn = -1;
-		int lastPositiveColumn = -1;
-		for (int i = 0; i < columnSizes.size(); i++) {
-			int columnSize = columnSizes.get(i);
-			if (columnSize != 0) {
-				visibleColumns++;
+		int rowWidth = 0;
+
+		int i = 0;
+		for (TTableColumn tcol : columns) {
+			if (forceReflowCol) {
+				tcol.reflowData();
 			}
 
-			if (columnSize > 0) {
-				maxRowWidth += columnSize;
-				lastPositiveColumn = i;
-			} else if (columnSize < 0) {
-				columnSize = 0;
-				for (int j = -1; j < rows.size(); j++) {
-					List<String> row;
-					if (j < 0) {
-						row = headers;
-					} else {
-						row = rows.get(j);
-					}
+			if (!tcol.isForcedWidth()) {
+				lastAutoColumn = i;
+			}
 
-					lastAutoColumn = i;
-					columnSize = Math.min(-row.get(i).length(), columnSize);
+			rowWidth += tcol.getWidth();
+
+			i++;
+		}
+
+		if (!columns.isEmpty()) {
+			rowWidth += (i - 1) * getSeparatorRenderer().getWidthOf(null);
+
+			int extraWidth = getWidth() - rowWidth;
+			if (extraWidth > 0) {
+				if (lastAutoColumn < 0) {
+					lastAutoColumn = columns.size() - 1;
 				}
-
-				columnSizes.set(i, columnSize);
-				maxRowWidth += -columnSize;
+				TTableColumn tcol = columns.get(lastAutoColumn);
+				tcol.expandWidthTo(tcol.getWidth() + extraWidth);
+				rowWidth += extraWidth;
 			}
-		}
-
-		int expandColumn = lastAutoColumn;
-		if (expandColumn == -1) {
-			expandColumn = lastPositiveColumn;
-		}
-
-		if (visibleColumns > 0) {
-			maxRowWidth += (visibleColumns - 1) * INTER_COL.length();
-		}
-
-		// expand last auto col (or last col) to max size
-		if (expandColumn >= 0 && maxRowWidth < getWidth()) {
-			columnSizes.set(expandColumn, columnSizes.get(expandColumn)
-					- (getWidth() - maxRowWidth));
 		}
 	}
 
@@ -360,58 +410,47 @@ public class TTableOld extends TBrowsableWidget {
 	 * Draw the given row (or an empty one if row is NULL) at the specified
 	 * index and offset.
 	 * 
-	 * @param row
-	 *            the row to draw
-	 * @param xOffset
-	 *            the (positive or 0) X offset to apply while drawing
+	 * @param rowIndex
+	 *            the index of the row to draw or -1 for the headers
 	 * @param y
 	 *            the Y position
-	 * @param color
-	 *            the characters colour
-	 * @param colorSep
-	 *            the separators colour
 	 */
-	private void drawRow(List<String> row, int xOffset, int y,
-			CellAttributes color, CellAttributes colorSep) {
-		int x = 0;
-		for (int i = 0; i < columnSizes.size(); i++) {
-			int columnSize = Math.abs(columnSizes.get(i));
-			if (columnSize != 0) {
-				String formatString = "%-" + Integer.toString(columnSize) + "s";
-				String data = String.format(formatString, row == null ? ""
-						: row.get(i));
-				if (data.length() > xOffset) {
-					data = data.substring(xOffset);
-					getScreen().putStringXY(x, y, data, color);
-				}
+	private void drawRow(int rowIndex, int y) {
+		for (int i = 0; i < getColumnCount(); i++) {
+			TTableColumn tcol = columns.get(i);
+			Object value;
+			if (rowIndex < 0) {
+				value = headers.get(i);
+			} else {
+				value = model.getValueAt(rowIndex, i);
+			}
 
-				x += columnSize - xOffset;
-				for (char car : INTER_COL.toCharArray()) {
-					getScreen().putCharXY(x, y, car,
-							car == ' ' ? color : colorSep);
-					x++;
-				}
+			if (i > 0) {
+				TTableOldCellRenderer sep = rowIndex < 0 ? getHeaderSeparatorRenderer()
+						: getSeparatorRenderer();
+				sep.renderTableCell(this, null, rowIndex, i - 1, y);
+			}
 
-				xOffset -= data.length();
-				if (xOffset < 0) {
-					xOffset = 0;
-				}
+			if (rowIndex < 0) {
+				getHeaderRenderer()
+						.renderTableCell(this, value, rowIndex, i, y);
+			} else {
+				tcol.getRenderer().renderTableCell(this, value, rowIndex, i, y);
 			}
 		}
 	}
 
 	@Override
 	public void draw() {
-		// TODO: change colours
-		CellAttributes colorSep = getTheme().getColor("tlist.inactive");
-		CellAttributes colorHeaders = getTheme().getColor("tlist");
-		CellAttributes colorHeadersSep = getTheme().getColor("tlist.inactive");
+		ColorTheme theme = getTheme();
+
 		int begin = vScroller.getValue();
-		int topY = this.topY;
+		int y = this.showHeader ? 2 : 0;
 
 		if (showHeader) {
-			drawRow(headers, hScroller.getValue(), 0, colorHeaders,
-					colorHeadersSep);
+			CellAttributes colorHeaders = getHeaderRenderer()
+					.getCellAttributes(theme, false, isAbsoluteActive());
+			drawRow(-1, 0);
 			// TODO: draw horizontal row? Empty row with seps? blank row?
 			// drawRow(null, hScroller.getValue(), 1, colorHeaders,
 			// colorHeadersSep);
@@ -420,24 +459,15 @@ public class TTableOld extends TBrowsableWidget {
 			getScreen().putStringXY(0, 1, data, colorHeaders);
 		}
 
-		CellAttributes color = null;
-		int selectedRow = getSelectedRow();
-		for (int i = begin; i < size(); i++) {
-			if (i == selectedRow) {
-				color = getTheme().getColor("tlist.selected");
-			} else if (isAbsoluteActive()) {
-				color = getTheme().getColor("tlist");
-			} else {
-				color = getTheme().getColor("tlist.inactive");
-			}
-
-			drawRow(rows.get(i), hScroller.getValue(), topY, color, colorSep);
-			topY++;
-			if (topY >= getHeight() - 1) {
+		for (int i = begin; i < getRowCount(); i++) {
+			drawRow(i, y);
+			y++;
+			if (y >= getHeight() - 1) {
 				break;
 			}
 		}
 
+		CellAttributes color;
 		if (isAbsoluteActive()) {
 			color = getTheme().getColor("tlist");
 		} else {
@@ -445,7 +475,7 @@ public class TTableOld extends TBrowsableWidget {
 		}
 
 		// Pad the rest with blank rows
-		for (int i = topY; i < getHeight() - 1; i++) {
+		for (int i = y; i < getHeight() - 1; i++) {
 			getScreen().hLineXY(0, i, getWidth() - 1, ' ', color);
 		}
 	}

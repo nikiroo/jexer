@@ -14,7 +14,7 @@ public class DemoTTable extends TWindow {
 	private TScrollableWidget widget;
 
 	public DemoTTable(TApplication application, boolean old) {
-		super(application, "Add/Remove widgets", 60, 20);
+		super(application, old ? "Old Table" : "New Table", 60, 20);
 
 		List<String> headers = Arrays.asList("COL_1", "COL_2");
 
@@ -29,10 +29,8 @@ public class DemoTTable extends TWindow {
 		if (old) {
 			TTableOld tab1 = new TTableOld(this, 0, 0, getWidth(), getHeight(),
 					null, null);
+			tab1.setRowData(rows, headers);
 			tab1.setHeaders(headers, true);
-			for (List<String> row : rows) {
-				tab1.addRow(row);
-			}
 			widget = tab1;
 		} else {
 			TTable tab2 = new TTable(this, 0, 0, getWidth(), getHeight(), null,

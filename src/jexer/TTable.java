@@ -54,6 +54,10 @@ public class TTable extends TBrowsableWidget {
 	static private TTableCellRenderer defaultHeaderRenderer = new TTableSimpleTextCellRenderer(
 			CellRendererMode.HEADER);
 
+	private TTableCellRenderer cellRenderer;
+	private TTableCellRenderer separatorRenderer;
+	private TTableCellRenderer headerRenderer;
+
 	/**
 	 * The action to perform when the user selects an item (mouse click or
 	 * enter).
@@ -152,14 +156,33 @@ public class TTable extends TBrowsableWidget {
 		}
 	}
 
-	/**
-	 * The number of rows.
-	 * 
-	 * @return the number of rows
-	 */
+	public TTableCellRenderer getCellRenderer() {
+		return cellRenderer;
+	}
+
+	public void setCellRenderer(TTableCellRenderer cellRenderer) {
+		this.cellRenderer = cellRenderer;
+	}
+
+	public TTableCellRenderer getSeparatorRenderer() {
+		return separatorRenderer;
+	}
+
+	public void setSeparatorRenderer(TTableCellRenderer separatorRenderer) {
+		this.separatorRenderer = separatorRenderer;
+	}
+
+	public TTableCellRenderer getHeaderRenderer() {
+		return headerRenderer;
+	}
+
+	public void setHeaderRenderer(TTableCellRenderer headerRenderer) {
+		this.headerRenderer = headerRenderer;
+	}
+
 	@Override
-	public int getNumberOfRows() {
-		return rows.size();
+	public int getRowCount() {
+		return model.getRowCount();
 	}
 
 	/**
@@ -167,8 +190,8 @@ public class TTable extends TBrowsableWidget {
 	 * 
 	 * @return the number of columns
 	 */
-	public int getNumberOfColumns() {
-		return headers.size();
+	public int getColumnCount() {
+		return model.getColumnCount();
 	}
 
 	/**
@@ -311,7 +334,7 @@ public class TTable extends TBrowsableWidget {
 	public void reflowData() {
 		super.reflowData();
 		// TODO: only reflow the visible rows
-		reflow(0, rows.size() - 1);
+		reflow(0, getRowCount() - 1);
 	}
 
 	/**
@@ -320,6 +343,19 @@ public class TTable extends TBrowsableWidget {
 	 * discarded).
 	 */
 	private void reflow(int fromRow, int toRow) {
+		TTableCellRenderer headerRenderer = getHeaderRenderer();
+		if (headerRenderer == null) {
+			headerRenderer = defaultHeaderRenderer;
+		}
+		TTableCellRenderer cellRenderer = getCellRenderer();
+		if (cellRenderer == null) {
+			cellRenderer = defaultCellRenderer;
+		}
+		TTableCellRenderer separatorRenderer = getSeparatorRenderer();
+		if (separatorRenderer == null) {
+			separatorRenderer = defaultSeparatorRenderer;
+		}
+
 		int numOfCols = columns.size();
 		int selectedRow = getSelectedRow();
 		for (int rowIndex = fromRow - headerSize; rowIndex <= toRow; rowIndex++) {
@@ -327,20 +363,6 @@ public class TTable extends TBrowsableWidget {
 			for (int displayColIndex = 0; displayColIndex < numOfCols; displayColIndex++) {
 				TTableColumn tcol = columns.get(displayColIndex);
 				int colIndex = tcol.getModelIndex();
-
-				TTableCellRenderer headerRenderer = tcol.getHeaderRenderer();
-				if (headerRenderer == null) {
-					headerRenderer = defaultHeaderRenderer;
-				}
-				TTableCellRenderer cellRenderer = tcol.getCellRenderer();
-				if (cellRenderer == null) {
-					cellRenderer = defaultCellRenderer;
-				}
-				TTableCellRenderer separatorRenderer = tcol
-						.getSeparatorRenderer();
-				if (separatorRenderer == null) {
-					separatorRenderer = defaultSeparatorRenderer;
-				}
 
 				if (rowIndex == -1) {
 					Object value = columns.get(colIndex).getHeaderValue();

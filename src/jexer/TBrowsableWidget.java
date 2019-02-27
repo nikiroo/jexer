@@ -19,7 +19,7 @@ import jexer.event.TResizeEvent;
 abstract public class TBrowsableWidget extends TScrollableWidget {
 	private int selectedRow;
 
-	abstract protected int getNumberOfRows();
+	abstract protected int getRowCount();
 
 	/**
 	 * Basic setup of this class (called by all constructors)
@@ -137,7 +137,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		}
 
 		if ((mouse.getX() < getWidth() - 1) && (mouse.getY() < getHeight() - 1)) {
-			if (vScroller.getValue() + mouse.getY() < getNumberOfRows()) {
+			if (vScroller.getValue() + mouse.getY() < getRowCount()) {
 				selectedRow = vScroller.getValue() + mouse.getY();
 			}
 			dispatchEnter(selectedRow);
@@ -152,7 +152,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	public void onKeypress(final TKeypressEvent keypress) {
 		// TODO: left/right to switch column?
 
-		int maxX = getNumberOfRows();
+		int maxX = getRowCount();
 		int prevSelectedRow = selectedRow;
 
 		if (keypress.equals(kbLeft)) {
@@ -201,22 +201,22 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 			if (selectedRow >= 0) {
 				vScroller.bigIncrement();
 				selectedRow += getHeight() - 1;
-				if (selectedRow > getNumberOfRows() - 1) {
-					selectedRow = getNumberOfRows() - 1;
+				if (selectedRow > getRowCount() - 1) {
+					selectedRow = getRowCount() - 1;
 				}
 
 				dispatchMove(prevSelectedRow, selectedRow);
 			}
 		} else if (keypress.equals(kbHome)) {
-			if (getNumberOfRows() > 0) {
+			if (getRowCount() > 0) {
 				vScroller.toTop();
 				selectedRow = 0;
 				dispatchMove(prevSelectedRow, selectedRow);
 			}
 		} else if (keypress.equals(kbEnd)) {
-			if (getNumberOfRows() > 0) {
+			if (getRowCount() > 0) {
 				vScroller.toBottom();
-				selectedRow = getNumberOfRows() - 1;
+				selectedRow = getRowCount() - 1;
 				dispatchMove(prevSelectedRow, selectedRow);
 			}
 		} else if (keypress.equals(kbTab)) {
