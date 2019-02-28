@@ -28,6 +28,9 @@
  */
 package jexer;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * A simple {@link TTableCellRenderer} that display the values within a
  * {@link TLabel}.
@@ -37,24 +40,9 @@ package jexer;
  * 
  * @author niki
  */
-public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
-	private boolean separator;
-	private boolean header;
+public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
 	private boolean rightAlign;
-
-	/**
-	 * The simple renderer mode.
-	 * 
-	 * @author niki
-	 */
-	public enum CellRendererMode {
-		/** Normal text mode */
-		NORMAL,
-		/** Only display a separator */
-		SEPARATOR,
-		/** Header text mode */
-		HEADER;
-	}
+	private Map<String, TWidget> widgets = new HashMap<String, TWidget>();
 
 	/**
 	 * Create a new renderer for normal text mode.
@@ -77,92 +65,65 @@ public class TTableSimpleTextCellRenderer implements TTableCellRenderer {
 	 * Create a new renderer of the given mode.
 	 * 
 	 * @param mode
-	 *            the renderer mode
+	 *            the renderer mode, cannot be NULL
 	 */
 	public TTableSimpleTextCellRenderer(CellRendererMode mode,
 			boolean rightAlign) {
-		separator = mode == CellRendererMode.SEPARATOR;
-		header = mode == CellRendererMode.HEADER;
+		super(mode);
+
 		this.rightAlign = rightAlign;
 	}
 
 	@Override
-	public TWidget getTableCellRendererComponent(TTable table, Object value,
-			boolean isSelected, boolean hasFocus, int row, int column, int width) {
-		return new TLabel(table, getText(value, width), 0, 0, getColorKey(
-				isSelected, hasFocus), false);
+	public void renderTableCell(TTableOld table, Object value, int rowIndex,
+			int colIndex, int y) {
+
+		String wkey = "[Row " + y + " " + getMode() + "]";
+		TWidget widget = widgets.get(wkey);
+
+		TTableColumn tcol = table.getColumns().get(colIndex);
+		boolean isSelected = table.getSelectedRow() == rowIndex;
+		boolean hasFocus = table.isAbsoluteActive();
+		int width = tcol.getWidth();
+
+		int xOffset = getXOffset(table, colIndex);
+
+		if (widget != null
+				&& !updateTableCellRendererComponent(widget, value, isSelected,
+						hasFocus, xOffset, y, width)) {
+			table.removeChild(widget);
+			widget = null;
+		}
+
+		if (widget == null) {
+			widget = getTableCellRendererComponent(table, value, isSelected,
+					hasFocus, y, xOffset, width);
+		}
+
+		widgets.put(wkey, widget);
 	}
 
-	@Override
-	public boolean updateTableCellRendererComponent(TTable table,
-			TWidget component, Object value, boolean isSelected,
-			boolean hasFocus, int row, int column, int width) {
+	private TWidget getTableCellRendererComponent(TTableOld table,
+			Object value, boolean isSelected, boolean hasFocus, int row,
+			int column, int width) {
+		return new TLabel(table, asText(value, width, rightAlign), column, row,
+				getColorKey(isSelected, hasFocus), false);
+	}
+
+	private boolean updateTableCellRendererComponent(TWidget component,
+			Object value, boolean isSelected, boolean hasFocus, int x, int y,
+			int width) {
 
 		if (component instanceof TLabel) {
 			TLabel widget = (TLabel) component;
-			widget.setLabel(getText(value, width));
+			widget.setLabel(asText(value, width, rightAlign));
 			widget.setColorKey(getColorKey(isSelected, hasFocus));
+			widget.setWidth(width);
+			widget.setX(x);
+			widget.setY(y);
 			return true;
 		}
 
 		return false;
-	}
-
-	/**
-	 * Return the text to use (usually the converted-to-text value, except for
-	 * the special separator mode).
-	 * 
-	 * @param value
-	 *            the value to get the text of
-	 * @param width
-	 *            the width we should tale
-	 * 
-	 * @return the {@link String} to display
-	 */
-	protected String getText(Object value, int width) {
-		if (separator) {
-			// some nice characters for the separator: ┃ │ |
-			return " │ ";
-		}
-
-		if (width <= 0) {
-			return "";
-		}
-
-		String format;
-		if (!rightAlign) {
-			// Left align
-			format = "%-" + width + "s";
-		} else {
-			// right align
-			format = "%" + width + "s";
-		}
-
-		return String.format(format, value);
-	}
-
-	/**
-	 * The colour to use for the given state, specified as a Jexer colour key.
-	 * 
-	 * @param isSelected
-	 *            TRUE if the cell is selected
-	 * @param hasFocus
-	 *            TRUE if the cell has focus
-	 * 
-	 * @return the colour key
-	 */
-	protected String getColorKey(boolean isSelected, boolean hasFocus) {
-		if (header) {
-			return "tlabel";
-		}
-
-		String colorKey = "tlist";
-		if (isSelected) {
-			colorKey += ".selected";
-		} else if (!hasFocus) {
-			colorKey += ".inactive";
-		}
-
-		return colorKey;
 	}
 }

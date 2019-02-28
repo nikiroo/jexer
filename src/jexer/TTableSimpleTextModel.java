@@ -38,6 +38,8 @@ public class TTableSimpleTextModel implements TableModel {
 
 		final int maxItemsPerRowFinal = maxItemsPerRow;
 		this.model = new AbstractTableModel() {
+			private static final long serialVersionUID = 1L;
+
 			@Override
 			public String getValueAt(int rowIndex, int columnIndex) {
 				return odata[rowIndex][columnIndex];

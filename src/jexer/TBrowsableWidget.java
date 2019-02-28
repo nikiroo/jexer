@@ -18,8 +18,13 @@ import jexer.event.TResizeEvent;
 
 abstract public class TBrowsableWidget extends TScrollableWidget {
 	private int selectedRow;
+	private int yOffset;
 
 	abstract protected int getRowCount();
+
+	abstract int getVirtualWidth();
+
+	abstract int getVirtualHeight();
 
 	/**
 	 * Basic setup of this class (called by all constructors)
@@ -115,6 +120,27 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		this.selectedRow = selectedRow;
 	}
 
+	/**
+	 * An offset on the Y position of the table, i.e., the number of rows that
+	 * should always stay on top.
+	 * 
+	 * @return the offset
+	 */
+	public int getyOffset() {
+		return yOffset;
+	}
+
+	/**
+	 * An offset on the Y position of the table, i.e., the number of rows that
+	 * should always stay on top.
+	 * 
+	 * @param yOffset
+	 *            the new offset
+	 */
+	public void setyOffset(int yOffset) {
+		this.yOffset = yOffset;
+	}
+
 	@SuppressWarnings("unused")
 	public void dispatchMove(int fromRow, int toRow) {
 		reflowData();
@@ -150,10 +176,12 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 
 	@Override
 	public void onKeypress(final TKeypressEvent keypress) {
-		// TODO: left/right to switch column?
-
 		int maxX = getRowCount();
 		int prevSelectedRow = selectedRow;
+
+		int firstLineIndex = vScroller.getValue() - getyOffset() + 2;
+		int lastLineIndex = firstLineIndex - hScroller.getHeight()
+				+ getHeight() - 2 - 2;
 
 		if (keypress.equals(kbLeft)) {
 			hScroller.decrement();
@@ -162,7 +190,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		} else if (keypress.equals(kbUp)) {
 			if (maxX > 0 && selectedRow < maxX) {
 				if (selectedRow > 0) {
-					if (selectedRow - vScroller.getValue() == 0) {
+					if (selectedRow <= firstLineIndex) {
 						vScroller.decrement();
 					}
 					selectedRow--;
@@ -177,7 +205,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 				if (selectedRow >= 0) {
 					if (selectedRow < maxX - 1) {
 						selectedRow++;
-						if (selectedRow + 1 - vScroller.getValue() == getHeight() - 1) {
+						if (selectedRow >= lastLineIndex) {
 							vScroller.increment();
 						}
 					}
@@ -250,5 +278,15 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		vScroller.setHeight(Math.max(1, getHeight() - 2));
 		hScroller.setY(Math.max(0, getHeight() - 3));
 		hScroller.setWidth(Math.max(1, getWidth() - 3));
+
+		// virtual_size
+		// - the other scroll bar size
+		// + 2 (for the border of the window)
+		vScroller.setTopValue(0);
+		vScroller.setBottomValue(Math.max(0, getVirtualHeight() - getHeight()
+				+ hScroller.getHeight() + 2));
+		hScroller.setLeftValue(0);
+		hScroller.setRightValue(Math.max(0, getVirtualWidth() - getWidth()
+				+ vScroller.getWidth() + 2));
 	}
 }

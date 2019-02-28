@@ -5,8 +5,9 @@ import java.util.List;
 
 import jexer.TApplication;
 import jexer.TScrollableWidget;
-import jexer.TTable;
+import jexer.TTableColumn;
 import jexer.TTableOld;
+import jexer.TTableSimpleTextCellRenderer;
 import jexer.TWindow;
 import jexer.event.TResizeEvent;
 
@@ -14,16 +15,25 @@ public class DemoTTable extends TWindow {
 	private TScrollableWidget widget;
 
 	public DemoTTable(TApplication application, boolean old) {
-		super(application, old ? "Old Table" : "New Table", 60, 20);
+		super(application, old ? "Old Table" : "New Table", 30, 10);
 
 		List<String> headers = Arrays.asList("COL_1", "COL_2");
 
 		@SuppressWarnings("unchecked")
-		List<List<String>> rows = Arrays.asList(
-				Arrays.asList("val 1", "val 2"), //
-				Arrays.asList("seval 1", "v 2"), //
-				Arrays.asList("col value 1", "value 2"), //
-				Arrays.asList("v1", "vavavava 2") //
+		List<List<String>> rows = Arrays.asList(Arrays.asList(
+				"First row, first column", "Some value for row1 col2"), //
+				Arrays.asList("This is a key", "This is a value"), //
+				Arrays.asList("Testy", "Toasty"), //
+				Arrays.asList("v1", "Vavakung"), //
+				Arrays.asList("1", "un"), //
+				Arrays.asList("2", "deux"), //
+				Arrays.asList("3", "trois"), //
+				Arrays.asList("4", "quatre"), //
+				Arrays.asList("5", "cinq"), //
+				Arrays.asList("6", "six"), //
+				Arrays.asList("7", "sept"), //
+				Arrays.asList("8", "huit"), //
+				Arrays.asList("9", "neuf") //
 				);
 
 		if (old) {
@@ -33,10 +43,18 @@ public class DemoTTable extends TWindow {
 			tab1.setHeaders(headers, true);
 			widget = tab1;
 		} else {
-			TTable tab2 = new TTable(this, 0, 0, getWidth(), getHeight(), null,
-					null, true);
-			tab2.setRowData(rows, headers);
-			widget = tab2;
+			/*
+			 * TTable tab2 = new TTable(this, 0, 0, getWidth(), getHeight(),
+			 * null, null, true); tab2.setRowData(rows, headers); widget = tab2;
+			 */
+			TTableOld tab1 = new TTableOld(this, 0, 0, getWidth(), getHeight(),
+					null, null);
+			tab1.setRowData(rows, headers);
+			tab1.setHeaders(headers, true);
+			for (TTableColumn tcol : tab1.getColumns()) {
+				tcol.setCellRenderer(new TTableSimpleTextCellRenderer());
+			}
+			widget = tab1;
 		}
 	}
 

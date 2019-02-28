@@ -2,7 +2,7 @@ package jexer;
 
 import javax.swing.table.TableModel;
 
-import jexer.TTableOldSimpleTextCellRenderer.CellRendererMode;
+import jexer.TTableOldCellRenderer.CellRendererMode;
 
 public class TTableColumn {
 	static private TTableOldCellRenderer defaultrenderer = new TTableOldSimpleTextCellRenderer(
