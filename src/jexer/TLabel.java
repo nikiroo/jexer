@@ -149,4 +149,21 @@ public class TLabel extends TWidget {
         this.label = label;
     }
 
+    /**
+     * The ColorTheme key color to use for foreground text.
+     * 
+     * @return the key
+     */
+    public String getColorKey() {
+		return colorKey;
+	}
+    
+    /**
+     * The ColorTheme key color to use for foreground text.
+     * 
+     * @param colorKey the new key
+     */
+    public void setColorKey(String colorKey) {
+		this.colorKey = colorKey;
+	}
 }

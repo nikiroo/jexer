@@ -176,13 +176,9 @@ public abstract class TWidget implements Comparable<TWidget> {
      */
     protected TWidget(final TWidget parent, final boolean enabled) {
         this.enabled = enabled;
-        this.parent = parent;
-        this.window = parent.window;
         children = new ArrayList<TWidget>();
 
-        // Do not add TStatusBars, they are drawn by TApplication
-        if (this instanceof TStatusBar) {
-        } else {
+        if (parent != null) {
             parent.addChild(this);
         }
     }
@@ -200,17 +196,8 @@ public abstract class TWidget implements Comparable<TWidget> {
     protected TWidget(final TWidget parent, final boolean enabled,
         final int x, final int y, final int width, final int height) {
 
-        this.enabled = enabled;
-        this.parent = parent;
-        this.window = parent.window;
-        children = new ArrayList<TWidget>();
-
-        // Do not add TStatusBars, they are drawn by TApplication
-        if (this instanceof TStatusBar) {
-        } else {
-            parent.addChild(this);
-        }
-
+        this(parent, enabled);
+        
         this.x = x;
         this.y = y;
         this.width = width;
@@ -1014,7 +1001,19 @@ public abstract class TWidget implements Comparable<TWidget> {
      *
      * @param child TWidget to add
      */
-    private void addChild(final TWidget child) {
+    public void addChild(final TWidget child) {
+    	if (child.parent != null) {
+    		child.parent.removeChild(child);
+    	}
+    	
+    	child.parent = this;
+        child.window = this.window;
+
+        // Do not add TStatusBars, they are drawn by TApplication
+        if (this instanceof TStatusBar) {
+        	return;
+        }
+        
         children.add(child);
 
         if ((child.enabled)
@@ -1030,6 +1029,23 @@ public abstract class TWidget implements Comparable<TWidget> {
         for (int i = 0; i < children.size(); i++) {
             children.get(i).tabOrder = i;
         }
+    }
+    
+    /**
+     * Remove the given child from this widget.
+     * <p>
+     * Will also reorder the tab values of the remaining children.
+     * @param child the child to remove
+     */
+    public void removeChild(final TWidget child) {
+    	if (children.remove(child)) {
+    		child.parent = null;
+    		child.window = null;
+    		
+    		for (int i = 0; i < children.size(); i++) {
+                children.get(i).tabOrder = i;
+            }
+    	}
     }
 
     /**
