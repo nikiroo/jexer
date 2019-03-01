@@ -42,8 +42,8 @@ import jexer.event.TResizeEvent;
 public class DemoTTable extends TWindow {
 	private TScrollableWidget widget;
 
-	public DemoTTable(TApplication application) {
-		super(application, "Text Table", 30, 10);
+	public DemoTTable(TApplication application, boolean text) {
+		super(application, text ? "Text Table" : "Widget Table", 30, 10);
 
 		List<String> headers = Arrays.asList("COL_1", "COL_2");
 
@@ -64,11 +64,22 @@ public class DemoTTable extends TWindow {
 				Arrays.asList("9", "neuf") //
 				);
 
-		TTable tab1 = new TTable(this, 0, 0, getWidth(), getHeight(), null,
-				null);
-		tab1.setRowData(rows);
-		tab1.setHeaders(headers, true);
-		widget = tab1;
+		if (text) {
+			TTable tab1 = new TTable(this, 0, 0, getWidth(), getHeight(), null,
+					null);
+			tab1.setRowData(rows);
+			tab1.setHeaders(headers, true);
+			widget = tab1;
+		} else {
+			TTable tab1 = new TTable(this, 0, 0, getWidth(), getHeight(), null,
+					null);
+			tab1.setRowData(rows);
+			tab1.setHeaders(headers, true);
+			for (TTableColumn tcol : tab1.getColumns()) {
+				tcol.setCellRenderer(new TTableCellRendererWidget());
+			}
+			widget = tab1;
+		}
 	}
 
 	@Override
