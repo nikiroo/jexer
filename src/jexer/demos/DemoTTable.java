@@ -6,8 +6,8 @@ import java.util.List;
 import jexer.TApplication;
 import jexer.TScrollableWidget;
 import jexer.TTableColumn;
-import jexer.TTableOld;
-import jexer.TTableSimpleTextCellRenderer;
+import jexer.TTable;
+import jexer.TTableCellRendererWidget;
 import jexer.TWindow;
 import jexer.event.TResizeEvent;
 
@@ -37,7 +37,7 @@ public class DemoTTable extends TWindow {
 				);
 
 		if (old) {
-			TTableOld tab1 = new TTableOld(this, 0, 0, getWidth(), getHeight(),
+			TTable tab1 = new TTable(this, 0, 0, getWidth(), getHeight(),
 					null, null);
 			tab1.setRowData(rows, headers);
 			tab1.setHeaders(headers, true);
@@ -47,12 +47,12 @@ public class DemoTTable extends TWindow {
 			 * TTable tab2 = new TTable(this, 0, 0, getWidth(), getHeight(),
 			 * null, null, true); tab2.setRowData(rows, headers); widget = tab2;
 			 */
-			TTableOld tab1 = new TTableOld(this, 0, 0, getWidth(), getHeight(),
+			TTable tab1 = new TTable(this, 0, 0, getWidth(), getHeight(),
 					null, null);
 			tab1.setRowData(rows, headers);
 			tab1.setHeaders(headers, true);
 			for (TTableColumn tcol : tab1.getColumns()) {
-				tcol.setCellRenderer(new TTableSimpleTextCellRenderer());
+				tcol.setCellRenderer(new TTableCellRendererWidget());
 			}
 			widget = tab1;
 		}

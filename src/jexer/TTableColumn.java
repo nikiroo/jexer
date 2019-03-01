@@ -2,10 +2,10 @@ package jexer;
 
 import javax.swing.table.TableModel;
 
-import jexer.TTableOldCellRenderer.CellRendererMode;
+import jexer.TTableCellRenderer.CellRendererMode;
 
 public class TTableColumn {
-	static private TTableOldCellRenderer defaultrenderer = new TTableOldSimpleTextCellRenderer(
+	static private TTableCellRenderer defaultrenderer = new TTableCellRendererText(
 			CellRendererMode.NORMAL);
 
 	private TableModel model;
@@ -13,7 +13,7 @@ public class TTableColumn {
 	private int width;
 	private boolean forcedWidth;
 
-	private TTableOldCellRenderer renderer;
+	private TTableCellRenderer renderer;
 
 	/** The auto-computed width of the column (the width of the largest value) */
 	private int autoWidth;
@@ -41,11 +41,11 @@ public class TTableColumn {
 	}
 
 	// never null
-	public TTableOldCellRenderer getRenderer() {
+	public TTableCellRenderer getRenderer() {
 		return renderer != null ? renderer : defaultrenderer;
 	}
 
-	public void setCellRenderer(TTableOldCellRenderer renderer) {
+	public void setCellRenderer(TTableCellRenderer renderer) {
 		this.renderer = renderer;
 	}
 

@@ -1,3 +1,31 @@
+/*
+ * Jexer - Java Text User Interface
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (C) 2019 David "Niki" ROULET
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * @author David ROULET [niki@nikiroo.be]
+ * @version 1
+ */
 package jexer;
 
 import static jexer.TKeypress.kbBackTab;
@@ -16,14 +44,46 @@ import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
 
+/**
+ * This class represents a browsable {@link TWidget}, that is, a {@link TWidget}
+ * where you can use the keyboard or mouse to browse to one line to the next, or
+ * from left t right.
+ * 
+ * @author niki
+ */
 abstract public class TBrowsableWidget extends TScrollableWidget {
 	private int selectedRow;
+	private int selectedColumn;
 	private int yOffset;
 
+	/**
+	 * The number of rows in this {@link TWidget}.
+	 * 
+	 * @return the number of rows
+	 */
 	abstract protected int getRowCount();
 
+	/**
+	 * The number of columns in this {@link TWidget}.
+	 * 
+	 * @return the number of columns
+	 */
+	abstract protected int getColumnCount();
+
+	/**
+	 * The virtual width of this {@link TWidget}, that is, the total width it
+	 * can take to display all the data.
+	 * 
+	 * @return the width
+	 */
 	abstract int getVirtualWidth();
 
+	/**
+	 * The virtual height of this {@link TWidget}, that is, the total width it
+	 * can take to display all the data.
+	 * 
+	 * @return the height
+	 */
 	abstract int getVirtualHeight();
 
 	/**
@@ -36,7 +96,8 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	}
 
 	/**
-	 * Protected constructor.
+	 * Create a new {@link TBrowsableWidget} linked to the given {@link TWidget}
+	 * parent.
 	 * 
 	 * @param parent
 	 *            parent widget
@@ -47,7 +108,8 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	}
 
 	/**
-	 * Protected constructor.
+	 * Create a new {@link TBrowsableWidget} linked to the given {@link TWidget}
+	 * parent.
 	 * 
 	 * @param parent
 	 *            parent widget
@@ -67,7 +129,8 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	}
 
 	/**
-	 * Protected constructor used by subclasses that are disabled by default.
+	 * Create a new {@link TBrowsableWidget} linked to the given {@link TWidget}
+	 * parent.
 	 * 
 	 * @param parent
 	 *            parent widget
@@ -80,7 +143,8 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	}
 
 	/**
-	 * Protected constructor used by subclasses that are disabled by default.
+	 * Create a new {@link TBrowsableWidget} linked to the given {@link TWidget}
+	 * parent.
 	 * 
 	 * @param parent
 	 *            parent widget
@@ -112,17 +176,60 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 
 	/**
 	 * The currently selected row (or -1 if no row is selected).
+	 * <p>
+	 * You may want to call {@link TBrowsableWidget#reflowData()} when done to
+	 * see the changes.
 	 * 
 	 * @param selectedRow
 	 *            the new selected row
+	 * 
+	 * @throws IndexOutOfBoundsException
+	 *             when the index is out of bounds
 	 */
 	public void setSelectedRow(int selectedRow) {
+		if (selectedRow < -1 || selectedRow >= getRowCount()) {
+			throw new IndexOutOfBoundsException(String.format(
+					"Cannot set row %d on a table with %d rows", selectedRow,
+					getRowCount()));
+		}
+
 		this.selectedRow = selectedRow;
 	}
 
 	/**
-	 * An offset on the Y position of the table, i.e., the number of rows that
-	 * should always stay on top.
+	 * The currently selected column (or -1 if no column is selected).
+	 * 
+	 * @return the new selected column
+	 */
+	public int getSelectedColumn() {
+		return selectedColumn;
+	}
+
+	/**
+	 * The currently selected column (or -1 if no column is selected).
+	 * <p>
+	 * You may want to call {@link TBrowsableWidget#reflowData()} when done to
+	 * see the changes.
+	 * 
+	 * @param selectedColumn
+	 *            the new selected column
+	 * 
+	 * @throws IndexOutOfBoundsException
+	 *             when the index is out of bounds
+	 */
+	public void setSelectedColumn(int selectedColumn) {
+		if (selectedColumn < -1 || selectedColumn >= getColumnCount()) {
+			throw new IndexOutOfBoundsException(String.format(
+					"Cannot set column %d on a table with %d columns",
+					selectedColumn, getColumnCount()));
+		}
+
+		this.selectedColumn = selectedColumn;
+	}
+
+	/**
+	 * An offset on the Y position of the table, i.e., the number of rows to
+	 * skip so the control can draw that many rows always on top.
 	 * 
 	 * @return the offset
 	 */
@@ -164,7 +271,8 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 
 		if ((mouse.getX() < getWidth() - 1) && (mouse.getY() < getHeight() - 1)) {
 			if (vScroller.getValue() + mouse.getY() < getRowCount()) {
-				selectedRow = vScroller.getValue() + mouse.getY();
+				selectedRow = vScroller.getValue() + mouse.getY()
+						- getyOffset();
 			}
 			dispatchEnter(selectedRow);
 			return;

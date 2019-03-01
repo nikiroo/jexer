@@ -39,13 +39,13 @@ import jexer.bits.CellAttributes;
  * 
  * @author niki
  */
-public class TTableOldSimpleTextCellRenderer extends TTableOldCellRenderer {
+public class TTableCellRendererText extends TTableCellRenderer {
 	private boolean rightAlign;
 
 	/**
 	 * Create a new renderer for normal text mode.
 	 */
-	public TTableOldSimpleTextCellRenderer() {
+	public TTableCellRendererText() {
 		this(CellRendererMode.NORMAL);
 	}
 
@@ -55,7 +55,7 @@ public class TTableOldSimpleTextCellRenderer extends TTableOldCellRenderer {
 	 * @param mode
 	 *            the renderer mode
 	 */
-	public TTableOldSimpleTextCellRenderer(CellRendererMode mode) {
+	public TTableCellRendererText(CellRendererMode mode) {
 		this(mode, false);
 	}
 
@@ -65,7 +65,7 @@ public class TTableOldSimpleTextCellRenderer extends TTableOldCellRenderer {
 	 * @param mode
 	 *            the renderer mode, cannot be NULL
 	 */
-	public TTableOldSimpleTextCellRenderer(CellRendererMode mode,
+	public TTableCellRendererText(CellRendererMode mode,
 			boolean rightAlign) {
 		super(mode);
 
@@ -73,7 +73,7 @@ public class TTableOldSimpleTextCellRenderer extends TTableOldCellRenderer {
 	}
 
 	@Override
-	public void renderTableCell(TTableOld table, Object value, int rowIndex,
+	public void renderTableCell(TTable table, Object value, int rowIndex,
 			int colIndex, int y) {
 
 		int xOffset = getXOffset(table, colIndex);

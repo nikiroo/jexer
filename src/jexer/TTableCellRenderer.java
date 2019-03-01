@@ -32,12 +32,12 @@ import jexer.bits.CellAttributes;
 import jexer.bits.ColorTheme;
 
 /**
- * A {@link TTableOld} cell renderer allows you to customize the way a single
+ * A {@link TTable} cell renderer allows you to customize the way a single
  * cell will be displayed on screen.
  * 
  * @author niki
  */
-abstract public class TTableOldCellRenderer {
+abstract public class TTableCellRenderer {
 	private CellRendererMode mode;
 
 	/**
@@ -70,7 +70,7 @@ abstract public class TTableOldCellRenderer {
 	 * @param mode
 	 *            the renderer mode, cannot be NULL
 	 */
-	public TTableOldCellRenderer(CellRendererMode mode) {
+	public TTableCellRenderer(CellRendererMode mode) {
 		if (mode == null) {
 			throw new IllegalArgumentException(
 					"Cannot create a renderer of type NULL");
@@ -93,11 +93,11 @@ abstract public class TTableOldCellRenderer {
 	 * @param y
 	 *            the Y position at which to draw this row
 	 */
-	abstract public void renderTableCell(TTableOld table, Object value,
+	abstract public void renderTableCell(TTable table, Object value,
 			int rowIndex, int colIndex, int y);
 
 	/**
-	 * The mode of this {@link TTableOldCellRenderer}.
+	 * The mode of this {@link TTableCellRenderer}.
 	 * 
 	 * @return the mode
 	 */
@@ -154,7 +154,7 @@ abstract public class TTableOldCellRenderer {
 		return ("" + value).length();
 	}
 
-	protected int getXOffset(TTableOld table, int colIndex) {
+	protected int getXOffset(TTable table, int colIndex) {
 		int xOffset = -table.getHorizontalValue();
 		for (int i = 0; i <= colIndex; i++) {
 			TTableColumn tcol = table.getColumns().get(i);

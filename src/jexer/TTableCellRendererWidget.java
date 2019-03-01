@@ -40,14 +40,14 @@ import java.util.Map;
  * 
  * @author niki
  */
-public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
+public class TTableCellRendererWidget extends TTableCellRenderer {
 	private boolean rightAlign;
 	private Map<String, TWidget> widgets = new HashMap<String, TWidget>();
 
 	/**
 	 * Create a new renderer for normal text mode.
 	 */
-	public TTableSimpleTextCellRenderer() {
+	public TTableCellRendererWidget() {
 		this(CellRendererMode.NORMAL);
 	}
 
@@ -57,7 +57,7 @@ public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
 	 * @param mode
 	 *            the renderer mode
 	 */
-	public TTableSimpleTextCellRenderer(CellRendererMode mode) {
+	public TTableCellRendererWidget(CellRendererMode mode) {
 		this(mode, false);
 	}
 
@@ -67,7 +67,7 @@ public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
 	 * @param mode
 	 *            the renderer mode, cannot be NULL
 	 */
-	public TTableSimpleTextCellRenderer(CellRendererMode mode,
+	public TTableCellRendererWidget(CellRendererMode mode,
 			boolean rightAlign) {
 		super(mode);
 
@@ -75,7 +75,7 @@ public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
 	}
 
 	@Override
-	public void renderTableCell(TTableOld table, Object value, int rowIndex,
+	public void renderTableCell(TTable table, Object value, int rowIndex,
 			int colIndex, int y) {
 
 		String wkey = "[Row " + y + " " + getMode() + "]";
@@ -103,7 +103,7 @@ public class TTableSimpleTextCellRenderer extends TTableOldCellRenderer {
 		widgets.put(wkey, widget);
 	}
 
-	private TWidget getTableCellRendererComponent(TTableOld table,
+	private TWidget getTableCellRendererComponent(TTable table,
 			Object value, boolean isSelected, boolean hasFocus, int row,
 			int column, int width) {
 		return new TLabel(table, asText(value, width, rightAlign), column, row,
