@@ -67,8 +67,7 @@ public class TTableCellRendererWidget extends TTableCellRenderer {
 	 * @param mode
 	 *            the renderer mode, cannot be NULL
 	 */
-	public TTableCellRendererWidget(CellRendererMode mode,
-			boolean rightAlign) {
+	public TTableCellRendererWidget(CellRendererMode mode, boolean rightAlign) {
 		super(mode);
 
 		this.rightAlign = rightAlign;
@@ -90,7 +89,7 @@ public class TTableCellRendererWidget extends TTableCellRenderer {
 
 		if (widget != null
 				&& !updateTableCellRendererComponent(widget, value, isSelected,
-						hasFocus, xOffset, y, width)) {
+						hasFocus, y, xOffset, width)) {
 			table.removeChild(widget);
 			widget = null;
 		}
@@ -103,24 +102,63 @@ public class TTableCellRendererWidget extends TTableCellRenderer {
 		widgets.put(wkey, widget);
 	}
 
-	private TWidget getTableCellRendererComponent(TTable table,
-			Object value, boolean isSelected, boolean hasFocus, int row,
-			int column, int width) {
+	/**
+	 * Create a new {@link TWidget} to represent the given value.
+	 * 
+	 * @param table
+	 *            the parent {@link TTable}
+	 * @param value
+	 *            the value to represent
+	 * @param isSelected
+	 *            TRUE if selected
+	 * @param hasFocus
+	 *            TRUE if focused
+	 * @param row
+	 *            the row to draw it at
+	 * @param column
+	 *            the column to draw it at
+	 * @param width
+	 *            the width of the control
+	 * 
+	 * @return the widget
+	 */
+	protected TWidget getTableCellRendererComponent(TTable table, Object value,
+			boolean isSelected, boolean hasFocus, int row, int column, int width) {
 		return new TLabel(table, asText(value, width, rightAlign), column, row,
 				getColorKey(isSelected, hasFocus), false);
 	}
 
-	private boolean updateTableCellRendererComponent(TWidget component,
-			Object value, boolean isSelected, boolean hasFocus, int x, int y,
-			int width) {
+	/**
+	 * Update the content of the widget if at all possible.
+	 * 
+	 * @param component
+	 *            the component to update
+	 * @param value
+	 *            the value to represent
+	 * @param isSelected
+	 *            TRUE if selected
+	 * @param hasFocus
+	 *            TRUE if focused
+	 * @param row
+	 *            the row to draw it at
+	 * @param column
+	 *            the column to draw it at
+	 * @param width
+	 *            the width of the control
+	 * 
+	 * @return TRUE if the operation was possible, FALSE if it failed
+	 */
+	protected boolean updateTableCellRendererComponent(TWidget component,
+			Object value, boolean isSelected, boolean hasFocus, int row,
+			int column, int width) {
 
 		if (component instanceof TLabel) {
 			TLabel widget = (TLabel) component;
 			widget.setLabel(asText(value, width, rightAlign));
 			widget.setColorKey(getColorKey(isSelected, hasFocus));
 			widget.setWidth(width);
-			widget.setX(x);
-			widget.setY(y);
+			widget.setX(column);
+			widget.setY(row);
 			return true;
 		}
 

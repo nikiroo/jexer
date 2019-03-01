@@ -36,14 +36,38 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableModel;
 
+/**
+ * The model of a {@link TTable}. It contains the data of the table and allows
+ * you access to it.
+ * <p>
+ * Note that you don't need to send it the representation of the data, but the
+ * data itself; {@link TTableCellRenderer} is the class responsible of
+ * representing that data (you can change the headers renderer on a
+ * {@link TTable} and the cells renderer on each of its {@link TTableColumn}).
+ * <p>
+ * It works in a similar way to the Java Swing version of it.
+ * 
+ * @author niki
+ */
 public class TTableModel implements TableModel {
-
 	private TableModel model;
 
+	/**
+	 * Create a new {@link TTableModel} with the given data inside.
+	 * 
+	 * @param data
+	 *            the data
+	 */
 	public TTableModel(Object[][] data) {
 		this(convert(data));
 	}
 
+	/**
+	 * Create a new {@link TTableModel} with the given data inside.
+	 * 
+	 * @param data
+	 *            the data
+	 */
 	public TTableModel(
 			final Collection<? extends Collection<? extends Object>> data) {
 
@@ -130,6 +154,14 @@ public class TTableModel implements TableModel {
 		model.removeTableModelListener(l);
 	}
 
+	/**
+	 * Helper method to convert an array to a collection.
+	 * 
+	 * @param data
+	 *            the data
+	 * 
+	 * @return the data in another format
+	 */
 	static Collection<Collection<Object>> convert(Object[][] data) {
 		Collection<Collection<Object>> dataCollection = new ArrayList<Collection<Object>>(
 				data.length);

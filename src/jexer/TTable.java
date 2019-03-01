@@ -29,7 +29,6 @@
 package jexer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -56,8 +55,7 @@ public class TTable extends TBrowsableWidget {
 	static private TTableCellRenderer defaultHeaderSeparatorRenderer = new TTableCellRendererText(
 			CellRendererMode.HEADER_SEPARATOR);
 
-	private List<? extends Object> headers;
-	private boolean showHeaders;
+	private boolean showHeader;
 
 	private List<TTableColumn> columns = new ArrayList<TTableColumn>();
 	private TableModel model;
@@ -248,7 +246,7 @@ public class TTable extends TBrowsableWidget {
 	 * @return TRUE if we show them
 	 */
 	public boolean isShowHeader() {
-		return showHeaders;
+		return showHeader;
 	}
 
 	/**
@@ -258,51 +256,49 @@ public class TTable extends TBrowsableWidget {
 	 *            TRUE to show them
 	 */
 	public void setShowHeader(boolean showHeader) {
-		this.showHeaders = showHeader;
+		this.showHeader = showHeader;
+		setYOffset(showHeader ? 2 : 0);
 		reflowData();
 	}
 
 	/**
 	 * Change the headers of the table.
 	 * <p>
-	 * Note that if some data is present, the number of columns <b>MUST</b> be
-	 * identical.
+	 * Note that this method is a convenience method that will create columns of
+	 * the corresponding names and set them. As such, the previous columns if
+	 * any will be replaced.
 	 * 
 	 * @param headers
 	 *            the new headers
 	 */
 	public void setHeaders(List<? extends Object> headers) {
-		setHeaders(headers, showHeaders);
+		setHeaders(headers, showHeader);
 	}
 
 	/**
 	 * Change the headers of the table.
 	 * <p>
-	 * Note that if some data is present, the number of columns <b>MUST</b> be
-	 * identical.
+	 * Note that this method is a convenience method that will create columns of
+	 * the corresponding names and set them in the same order. As such, the
+	 * previous columns if any will be replaced.
 	 * 
 	 * @param headers
 	 *            the new headers
-	 * @param showHeaders
+	 * @param showHeader
 	 *            TRUE to show them on screen
 	 */
-	public void setHeaders(List<? extends Object> headers, boolean showHeaders) {
+	public void setHeaders(List<? extends Object> headers, boolean showHeader) {
 		if (headers == null) {
 			headers = new ArrayList<Object>();
 		}
 
-		if (getColumnCount() != headers.size()) {
-			throw new IllegalArgumentException(
-					String.format(
-							"Cannot set the headers of a table if the number of items is not equals to that of the current data rows: "
-									+ "%d elements in the data rows <> %d elements in the headers",
-							getColumnCount(), headers.size()));
+		int i = 0;
+		this.columns = new ArrayList<TTableColumn>();
+		for (Object header : headers) {
+			this.columns.add(new TTableColumn(i++, header, getModel()));
 		}
 
-		this.headers = headers;
-		this.showHeaders = showHeaders;
-
-		setyOffset(showHeaders ? 2 : 0);
+		setShowHeader(showHeader);
 	}
 
 	/**
@@ -311,13 +307,10 @@ public class TTable extends TBrowsableWidget {
 	 * @param data
 	 *            the data to set into this table, as an array of rows, that is,
 	 *            an array of arrays of values
-	 * @param names
-	 *            the optional names of the column (can be NULL)
 	 */
 
-	public void setRowData(Object[][] data, Object[] names) {
-		setRowData(TTableModel.convert(data), Arrays.asList(names));
-		// TODO: move to TTableModel ?
+	public void setRowData(Object[][] data) {
+		setRowData(TTableModel.convert(data));
 	}
 
 	/**
@@ -326,29 +319,10 @@ public class TTable extends TBrowsableWidget {
 	 * @param data
 	 *            the data to set into this table, as a collection of rows, that
 	 *            is, a collection of collections of values
-	 * @param names
-	 *            the optional names of the column (can be NULL)
 	 */
 	public void setRowData(
-			final Collection<? extends Collection<? extends Object>> data,
-			final Collection<? extends Object> names) {
-
-		TableModel model = new TTableModel(data);
-		// TODO: move to TTableModel ?
-
-		String[] onames;
-		if (names != null) {
-			onames = names.toArray(new String[] {});
-		} else {
-			onames = new String[model.getColumnCount()];
-		}
-
-		columns.clear();
-		for (int i = 0; i < onames.length; i++) {
-			columns.add(new TTableColumn(i, onames[i], model));
-		}
-
-		setModel(model);
+			final Collection<? extends Collection<? extends Object>> data) {
+		setModel(new TTableModel(data));
 	}
 
 	/**
@@ -449,9 +423,9 @@ public class TTable extends TBrowsableWidget {
 	@Override
 	public void draw() {
 		int begin = vScroller.getValue();
-		int y = this.showHeaders ? 2 : 0;
+		int y = this.showHeader ? 2 : 0;
 
-		if (showHeaders) {
+		if (showHeader) {
 			CellAttributes colorHeaders = getHeaderRenderer()
 					.getCellAttributes(getTheme(), false, isAbsoluteActive());
 			drawRow(-1, 0);
@@ -460,11 +434,16 @@ public class TTable extends TBrowsableWidget {
 			getScreen().putStringXY(0, 1, data, colorHeaders);
 		}
 
-		// draw the actual raw until no more,
+		// draw the actual rows until no more,
 		// then pad the rest with blank rows
 		for (int i = begin; i < getRowCount(); i++) {
 			drawRow(i, y);
 			y++;
+
+			// -2: window borders
+			if (y >= getHeight() - 2 - getHorizontalScroller().getHeight()) {
+				break;
+			}
 		}
 
 		CellAttributes emptyRowColor = getSeparatorRenderer()
@@ -496,7 +475,7 @@ public class TTable extends TBrowsableWidget {
 	@Override
 	protected int getVirtualHeight() {
 		// TODO: allow changing the height of one row
-		return (showHeaders ? 2 : 0) + (getRowCount() * 1);
+		return (showHeader ? 2 : 0) + (getRowCount() * 1);
 	}
 
 	/**
@@ -513,9 +492,9 @@ public class TTable extends TBrowsableWidget {
 			TTableColumn tcol = columns.get(i);
 			Object value;
 			if (rowIndex < 0) {
-				value = headers.get(i);
+				value = tcol.getHeaderValue();
 			} else {
-				value = model.getValueAt(rowIndex, i);
+				value = model.getValueAt(rowIndex, tcol.getModelIndex());
 			}
 
 			if (i > 0) {

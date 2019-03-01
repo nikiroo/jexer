@@ -32,8 +32,11 @@ import jexer.bits.CellAttributes;
 import jexer.bits.ColorTheme;
 
 /**
- * A {@link TTable} cell renderer allows you to customize the way a single
- * cell will be displayed on screen.
+ * A {@link TTable} cell renderer allows you to customize the way a single cell
+ * will be displayed on screen.
+ * <p>
+ * It can be used in a {@link TTable} for the haeders or the separators or in a
+ * {@link TTableColumn} for the data.
  * 
  * @author niki
  */
@@ -55,10 +58,20 @@ abstract public class TTableCellRenderer {
 		/** Both HEADER and SEPARATOR at once */
 		HEADER_SEPARATOR;
 
+		/**
+		 * This mode represents a separator.
+		 * 
+		 * @return TRUE for separators
+		 */
 		public boolean isSeparator() {
 			return this == SEPARATOR || this == HEADER_SEPARATOR;
 		}
 
+		/**
+		 * This mode represents a header.
+		 * 
+		 * @return TRUE for headers
+		 */
 		public boolean isHeader() {
 			return this == HEADER || this == HEADER_SEPARATOR;
 		}
@@ -123,6 +136,21 @@ abstract public class TTableCellRenderer {
 	}
 
 	/**
+	 * Measure the width of the value.
+	 * 
+	 * @param value
+	 *            the value to measure
+	 * 
+	 * @return its width
+	 */
+	public int getWidthOf(Object value) {
+		if (getMode().isSeparator()) {
+			return asText(null, 0, false).length();
+		}
+		return ("" + value).length();
+	}
+
+	/**
 	 * The colour to use for the given state, specified as a Jexer colour key.
 	 * 
 	 * @param isSelected
@@ -147,13 +175,16 @@ abstract public class TTableCellRenderer {
 		return colorKey;
 	}
 
-	public int getWidthOf(Object value) {
-		if (getMode().isSeparator()) {
-			return asText(null, 0, false).length();
-		}
-		return ("" + value).length();
-	}
-
+	/**
+	 * Return the X offset to use to draw a column at the given index.
+	 * 
+	 * @param table
+	 *            the table to draw into
+	 * @param colIndex
+	 *            the column index
+	 * 
+	 * @return the offset
+	 */
 	protected int getXOffset(TTable table, int colIndex) {
 		int xOffset = -table.getHorizontalValue();
 		for (int i = 0; i <= colIndex; i++) {

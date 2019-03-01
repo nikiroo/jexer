@@ -233,7 +233,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	 * 
 	 * @return the offset
 	 */
-	public int getyOffset() {
+	public int getYOffset() {
 		return yOffset;
 	}
 
@@ -244,7 +244,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	 * @param yOffset
 	 *            the new offset
 	 */
-	public void setyOffset(int yOffset) {
+	public void setYOffset(int yOffset) {
 		this.yOffset = yOffset;
 	}
 
@@ -272,7 +272,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		if ((mouse.getX() < getWidth() - 1) && (mouse.getY() < getHeight() - 1)) {
 			if (vScroller.getValue() + mouse.getY() < getRowCount()) {
 				selectedRow = vScroller.getValue() + mouse.getY()
-						- getyOffset();
+						- getYOffset();
 			}
 			dispatchEnter(selectedRow);
 			return;
@@ -287,7 +287,7 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		int maxX = getRowCount();
 		int prevSelectedRow = selectedRow;
 
-		int firstLineIndex = vScroller.getValue() - getyOffset() + 2;
+		int firstLineIndex = vScroller.getValue() - getYOffset() + 2;
 		int lastLineIndex = firstLineIndex - hScroller.getHeight()
 				+ getHeight() - 2 - 2;
 
