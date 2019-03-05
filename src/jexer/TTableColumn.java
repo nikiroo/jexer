@@ -90,17 +90,12 @@ public class TTableColumn {
 
 	/**
 	 * Set the actual size of the column or -1 for auto size.
-	 * <p>
-	 * 0 is not allowed.
 	 * 
 	 * @param width
 	 *            the width (or -1 for auto)
 	 */
 	public void setWidth(int width) {
-		if (width == 0)
-			throw new IllegalArgumentException("the width cannot be 0");
-
-		forcedWidth = width > 0;
+		forcedWidth = width >= 0;
 
 		if (forcedWidth) {
 			this.width = width;

@@ -77,12 +77,12 @@ public class TTableModel implements TableModel {
 		}
 
 		int i = 0;
-		final String[][] odata = new String[data.size()][maxItemsPerRow];
+		final Object[][] odata = new Object[data.size()][maxItemsPerRow];
 		for (Collection<? extends Object> rowOfData : data) {
 			odata[i] = new String[maxItemsPerRow];
 			int j = 0;
 			for (Object pieceOfData : rowOfData) {
-				odata[i][j] = "" + pieceOfData;
+				odata[i][j] = pieceOfData;
 				j++;
 			}
 			i++;
@@ -93,7 +93,7 @@ public class TTableModel implements TableModel {
 			private static final long serialVersionUID = 1L;
 
 			@Override
-			public String getValueAt(int rowIndex, int columnIndex) {
+			public Object getValueAt(int rowIndex, int columnIndex) {
 				return odata[rowIndex][columnIndex];
 			}
 
@@ -157,15 +157,17 @@ public class TTableModel implements TableModel {
 	/**
 	 * Helper method to convert an array to a collection.
 	 * 
+	 * @param <T>
+	 * 
 	 * @param data
 	 *            the data
 	 * 
 	 * @return the data in another format
 	 */
-	static Collection<Collection<Object>> convert(Object[][] data) {
-		Collection<Collection<Object>> dataCollection = new ArrayList<Collection<Object>>(
+	static <T> Collection<Collection<T>> convert(T[][] data) {
+		Collection<Collection<T>> dataCollection = new ArrayList<Collection<T>>(
 				data.length);
-		for (Object pieceOfData : data) {
+		for (T pieceOfData[] : data) {
 			dataCollection.add(Arrays.asList(pieceOfData));
 		}
 
