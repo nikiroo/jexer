@@ -28,12 +28,15 @@
  */
 package jexer;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import jexer.bits.CellAttributes;
 import jexer.bits.GraphicsChars;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
+import jexer.event.TResizeEvent;
+import jexer.event.TResizeEvent.Type;
 import static jexer.TKeypress.*;
 
 /**
@@ -61,6 +64,17 @@ public class TComboBox extends TWidget {
      */
     private TAction updateAction = null;
 
+    /**
+     * The height of the list of values when it is shown, or -1 to use the 
+     * number of values in the list as the height.
+     */
+    private int valuesHeight = -1;
+    
+    /**
+     * The values shown by the drop-down list.
+     */
+    private List<String> values = new ArrayList<String>();
+    
     // ------------------------------------------------------------------------
     // Constructors -----------------------------------------------------------
     // ------------------------------------------------------------------------
@@ -76,7 +90,7 @@ public class TComboBox extends TWidget {
      * @param valuesIndex the initial index in values, or -1 for no default
      * value
      * @param valuesHeight the height of the values drop-down when it is
-     * visible
+     * visible, or -1 to use the number of values as the height of the list
      * @param updateAction action to call when a new value is selected from
      * the list or enter is pressed in the edit field
      */
@@ -88,32 +102,89 @@ public class TComboBox extends TWidget {
         super(parent, x, y, width, 1);
 
         this.updateAction = updateAction;
+        this.values = values;
+        this.valuesHeight = valuesHeight;
 
-        field = new TField(this, 0, 0, width - 1, false, "",
+        field = new TField(this, 0, 0, Math.max(0, width - 1), false, "",
             updateAction, null);
         if (valuesIndex >= 0) {
             field.setText(values.get(valuesIndex));
         }
+        
+        // TODO: why is this required to tab out of the combo?
+        TField test = addField(0, 0, 1, true);
+        test.setActive(false);
+        test.setEnabled(false);
+        test.setVisible(false);
+        //
 
-        list = new TList(this, values, 0, 1, width, valuesHeight,
-            new TAction() {
-                public void DO() {
-                    field.setText(list.getSelected());
-                    list.setEnabled(false);
-                    list.setVisible(false);
-                    TComboBox.this.setHeight(1);
-                    TComboBox.this.activate(field);
-                    if (updateAction != null) {
-                        updateAction.DO();
-                    }
-                }
-            }
-        );
-
-        list.setEnabled(false);
-        list.setVisible(false);
+        if (valuesHeight <0) {
+        	this.valuesHeight = values == null ? 0 : values.size();
+        }
+        
         setHeight(1);
         activate(field);
+    }
+    
+    private void displayList() {
+    	if (this.list != null) {
+    		hideList();
+    	}
+    	
+		TList list = new TList(this, values, 0, 1, getWidth(), valuesHeight,
+	            new TAction() {
+					@Override
+	                public void DO() {
+	                	TList list = TComboBox.this.list;
+	                	if (list == null) {
+	                		return;
+	                	}
+	                	
+	                    field.setText(list.getSelected());
+	                    hideList();
+	                    if (updateAction != null) {
+	                        updateAction.DO();
+	                    }
+	                }
+	            }
+	        );
+		
+		int i = -1;
+		if (values != null) {
+			for (i = 0; i < values.size(); i++) {
+	            if (values.get(i).equals(field.getText())) {
+	                list.setSelectedIndex(i);
+	                break;
+	            }
+	        }
+			
+			if (i >= values.size()) {
+				i = -1;
+			}
+		}
+		
+        list.setSelectedIndex(i);
+        
+		list.setEnabled(true);
+        list.setVisible(true);
+        setHeight(list.getHeight() + 1);
+        activate(list);
+        
+        this.list = list;
+    }
+    
+    private void hideList() {
+    	TList list = this.list;
+    	
+    	if (list != null) {
+	    	list.setEnabled(false);
+	        list.setVisible(false);
+	        removeChild(list);
+	        setHeight(1);
+	        activate(field);
+	        
+	        this.list = null;
+    	}
     }
 
     // ------------------------------------------------------------------------
@@ -144,16 +215,10 @@ public class TComboBox extends TWidget {
     public void onMouseDown(final TMouseEvent mouse) {
         if ((mouseOnArrow(mouse)) && (mouse.isMouse1())) {
             // Make the list visible or not.
-            if (list.isActive()) {
-                list.setEnabled(false);
-                list.setVisible(false);
-                setHeight(1);
-                activate(field);
+            if (list != null) {
+                hideList();
             } else {
-                list.setEnabled(true);
-                list.setVisible(true);
-                setHeight(list.getHeight() + 1);
-                activate(list);
+                displayList();
             }
         }
     }
@@ -166,10 +231,7 @@ public class TComboBox extends TWidget {
     @Override
     public void onKeypress(final TKeypressEvent keypress) {
         if (keypress.equals(kbAltDown)) {
-            list.setEnabled(true);
-            list.setVisible(true);
-            setHeight(list.getHeight() + 1);
-            activate(list);
+            displayList();
             return;
         }
 
@@ -177,11 +239,8 @@ public class TComboBox extends TWidget {
             || (keypress.equals(kbShiftTab))
             || (keypress.equals(kbBackTab))
         ) {
-            if (list.isActive()) {
-                list.setEnabled(false);
-                list.setVisible(false);
-                setHeight(1);
-                activate(field);
+            if (list != null) {
+                hideList();
                 return;
             }
         }
@@ -231,13 +290,21 @@ public class TComboBox extends TWidget {
      */
     public void setText(final String text) {
         field.setText(text);
-        for (int i = 0; i < list.getMaxSelectedIndex(); i++) {
-            if (list.getSelected().equals(text)) {
-                list.setSelectedIndex(i);
-                return;
-            }
-        }
-        list.setSelectedIndex(-1);
     }
 
+    @Override
+    public void onResize(TResizeEvent resize) {
+    	super.onResize(resize);
+    	
+    	// TODO: why setW/setH/reflow not enough for the scrollbars?
+    	
+    	TList list = this.list;
+    	if (list != null) {
+			list.onResize(new TResizeEvent(Type.WIDGET, getWidth(),
+					list.getHeight()));
+    	}
+    	
+		field.onResize(new TResizeEvent(Type.WIDGET, getWidth(),
+				field.getHeight()));
+    }
 }
