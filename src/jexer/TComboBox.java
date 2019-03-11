@@ -28,6 +28,11 @@
  */
 package jexer;
 
+import static jexer.TKeypress.kbAltDown;
+import static jexer.TKeypress.kbBackTab;
+import static jexer.TKeypress.kbShiftTab;
+import static jexer.TKeypress.kbTab;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,7 +42,6 @@ import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
 import jexer.event.TResizeEvent.Type;
-import static jexer.TKeypress.*;
 
 /**
  * TComboBox implements a combobox containing a drop-down list and edit
@@ -117,19 +121,23 @@ public class TComboBox extends TWidget {
         test.setEnabled(false);
         test.setVisible(false);
         //
-
-        if (valuesHeight <0) {
-        	this.valuesHeight = values == null ? 0 : values.size();
-        }
         
         setHeight(1);
         activate(field);
     }
     
+    /**
+     * Display the drop-down menu.
+     */
     private void displayList() {
     	if (this.list != null) {
     		hideList();
     	}
+    	
+    	int valuesHeight = this.valuesHeight;
+    	if (valuesHeight < 0) {
+        	this.valuesHeight = values == null ? 0 : values.size() + 1;
+        }
     	
 		TList list = new TList(this, values, 0, 1, getWidth(), valuesHeight,
 	            new TAction() {
@@ -167,12 +175,16 @@ public class TComboBox extends TWidget {
         
 		list.setEnabled(true);
         list.setVisible(true);
-        setHeight(list.getHeight() + 1);
-        activate(list);
         
         this.list = list;
+        
+        reflowData();
+        activate(list);
     }
     
+    /**
+     * Hide the drop-down menu.
+     */
     private void hideList() {
     	TList list = this.list;
     	
@@ -291,20 +303,33 @@ public class TComboBox extends TWidget {
     public void setText(final String text) {
         field.setText(text);
     }
-
-    @Override
-    public void onResize(TResizeEvent resize) {
-    	super.onResize(resize);
-    	
+    
+    /**
+     * Make sure the widget displays all its elements correctly according to
+     * the current size and content.
+     */
+    public void reflowData() {
     	// TODO: why setW/setH/reflow not enough for the scrollbars?
-    	
     	TList list = this.list;
     	if (list != null) {
+    		int valuesHeight = this.valuesHeight;
+        	if (valuesHeight < 0) {
+            	this.valuesHeight = values == null ? 0 : values.size() + 1;
+            }
+        	
 			list.onResize(new TResizeEvent(Type.WIDGET, getWidth(),
-					list.getHeight()));
+					valuesHeight));
+			
+			setHeight(valuesHeight + 1);
     	}
     	
 		field.onResize(new TResizeEvent(Type.WIDGET, getWidth(),
 				field.getHeight()));
+    }
+
+    @Override
+    public void onResize(TResizeEvent resize) {
+    	super.onResize(resize);
+    	reflowData();
     }
 }
