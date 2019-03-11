@@ -83,6 +83,12 @@ public class TField extends TWidget {
      * The action to perform when the text is updated.
      */
     protected TAction updateAction;
+    
+    /**
+     * Restrict text modifications (you can still set the text programatically,
+     * but the UI won't allow the user to do it).
+     */
+    protected boolean readOnly = false;
 
     // ------------------------------------------------------------------------
     // Constructors -----------------------------------------------------------
@@ -364,6 +370,27 @@ public class TField extends TWidget {
         position = 0;
         windowStart = 0;
     }
+    
+    /**
+     * Restrict text modifications (you can still set the text programatically,
+     * but the UI won't allow the user to do it).
+     * 
+     * @return TRUE if the field is read-only
+     */
+    public boolean isReadOnly() {
+		return readOnly;
+	}
+    
+    /**
+     * Restrict text modifications (you can still set the text programatically,
+     * but the UI won't allow the user to do it).
+     * 
+     * @param readOnly TRUE to set the field to read-only, FALSE to set it to 
+     * read-write
+     */
+    public void setReadOnly(boolean readOnly) {
+		this.readOnly = readOnly;
+	}
 
     /**
      * Dispatch to the action function.
@@ -420,6 +447,10 @@ public class TField extends TWidget {
      * @param ch = char to append
      */
     protected void appendChar(final char ch) {
+    	if (readOnly) {
+    		return;	
+    	}
+    	
         // Append the LAST character
         text += ch;
         position++;
@@ -443,6 +474,10 @@ public class TField extends TWidget {
      * @param ch char to append
      */
     protected void insertChar(final char ch) {
+    	if (readOnly) {
+    		return;	
+    	}
+    	
         text = text.substring(0, position) + ch + text.substring(position);
         position++;
         if ((position - windowStart) == getWidth()) {
@@ -459,6 +494,10 @@ public class TField extends TWidget {
      * @param backspace TRUE for backspace behaviour, FALSE for delete behaviour
      */
     protected void deleteChar(boolean backspace) {
+    	if (readOnly) {
+    		return;	
+    	}
+    	
     	if (text.isEmpty()) {
     		return;
     	}
@@ -496,6 +535,10 @@ public class TField extends TWidget {
      * @param forcePositionMove
      */
     protected void replaceChar(char car, boolean forcePositionMove) {
+    	if (readOnly) {
+    		return;	
+    	}
+    	
     	text = text.substring(0, position)
                 + car
                 + text.substring(position + 1);

@@ -127,6 +127,26 @@ public class TComboBox extends TWidget {
     }
     
     /**
+     * Allow (or not) to write custom values into the combobox without
+     * using the pull-down menu.
+     * 
+     * @return TRUE if allowed
+     */
+    public boolean isReadOnly() {
+		return field.isReadOnly();
+	}
+    
+    /**
+     * Allow (or not) to write custom values into the combobox without
+     * using the pull-down menu
+     * 
+     * @param readOnly TRUE to allow it
+     */
+    public void setReadOnly(boolean readOnly) {
+    	field.setReadOnly(readOnly);
+    }
+    
+    /**
      * Display the drop-down menu.
      */
     private void displayList() {
