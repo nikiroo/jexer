@@ -244,27 +244,13 @@ public class TField extends TWidget {
         }
 
         if (keypress.equals(kbDel)) {
-            if ((text.length() > 0) && (position < text.length())) {
-                text = text.substring(0, position)
-                        + text.substring(position + 1);
-            }
+            deleteChar(false);
             dispatch(false);
             return;
         }
 
         if (keypress.equals(kbBackspace) || keypress.equals(kbBackspaceDel)) {
-            if (position > 0) {
-                position--;
-                text = text.substring(0, position)
-                        + text.substring(position + 1);
-            }
-            if (fixed == false) {
-                if ((position == windowStart)
-                    && (windowStart > 0)
-                ) {
-                    windowStart--;
-                }
-            }
+            deleteChar(true);
             dispatch(false);
             normalizeWindowStart();
             return;
@@ -286,10 +272,7 @@ public class TField extends TWidget {
                 // Overwrite or insert a character
                 if (insertMode == false) {
                     // Replace character
-                    text = text.substring(0, position)
-                            + keypress.getKey().getChar()
-                            + text.substring(position + 1);
-                    position++;
+                	replaceChar(keypress.getKey().getChar(), true);
                 } else {
                     // Insert character
                     insertChar(keypress.getKey().getChar());
@@ -302,18 +285,10 @@ public class TField extends TWidget {
                     // Buffer is full, do nothing
                 } else if ((fixed == true) && (insertMode == false)) {
                     // Overwrite the last character, maybe move position
-                    text = text.substring(0, position)
-                            + keypress.getKey().getChar()
-                            + text.substring(position + 1);
-                    if (position < getWidth() - 1) {
-                        position++;
-                    }
+                	replaceChar(keypress.getKey().getChar(), false);
                 } else if ((fixed == false) && (insertMode == false)) {
                     // Overwrite the last character, definitely move position
-                    text = text.substring(0, position)
-                            + keypress.getKey().getChar()
-                            + text.substring(position + 1);
-                    position++;
+                    replaceChar(keypress.getKey().getChar(), true);
                 } else {
                     if (position == text.length()) {
                         // Append this character
@@ -473,6 +448,59 @@ public class TField extends TWidget {
         if ((position - windowStart) == getWidth()) {
             assert (!fixed);
             windowStart++;
+        }
+    }
+    
+    
+    /**
+     * Delete the character at the current position, either from the left 
+     * (backspace) or from its direct right (not backspace, but delete).
+     * 
+     * @param backspace TRUE for backspace behaviour, FALSE for delete behaviour
+     */
+    protected void deleteChar(boolean backspace) {
+    	if (text.isEmpty()) {
+    		return;
+    	}
+    	
+    	if (backspace && position <= 0) {
+    		return;
+    	}
+    	
+    	if (!backspace && (position >= text.length())) {
+    		return;
+    	}
+    	
+    	if (backspace) {
+    		position--;
+    	}
+
+        text = text.substring(0, position)
+                + text.substring(position + 1);
+        
+        if (backspace && fixed == false) {
+            if ((position == windowStart)
+                && (windowStart > 0)
+            ) {
+                windowStart--;
+            }
+        }
+    }
+    
+    /**
+     * Replace the character at the current position with the given one.
+     * <p>
+     * Can also cause a position move if the current position is not
+     * at the end of the text (which can be forced if needed).
+     * @param car
+     * @param forcePositionMove
+     */
+    protected void replaceChar(char car, boolean forcePositionMove) {
+    	text = text.substring(0, position)
+                + car
+                + text.substring(position + 1);
+        if (forcePositionMove || position < getWidth() - 1) {
+            position++;
         }
     }
 
