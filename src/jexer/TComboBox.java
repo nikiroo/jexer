@@ -31,8 +31,6 @@ package jexer;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.print.attribute.standard.Sides;
-
 import jexer.bits.CellAttributes;
 import jexer.bits.GraphicsChars;
 import jexer.event.TKeypressEvent;
