@@ -24,7 +24,7 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * @author David ROULET [niki@nikiroo.be]
- * @version 1
+ * @version 2
  */
 package jexer;
 
@@ -40,6 +40,10 @@ import static jexer.TKeypress.kbRight;
 import static jexer.TKeypress.kbShiftTab;
 import static jexer.TKeypress.kbTab;
 import static jexer.TKeypress.kbUp;
+import jexer.THScroller;
+import jexer.TScrollableWidget;
+import jexer.TVScroller;
+import jexer.TWidget;
 import jexer.event.TKeypressEvent;
 import jexer.event.TMouseEvent;
 import jexer.event.TResizeEvent;
@@ -382,19 +386,25 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 	}
 
 	private void fixScrollers() {
-		vScroller.setX(Math.max(0, getWidth() - 3));
-		vScroller.setHeight(Math.max(1, getHeight() - 2));
-		hScroller.setY(Math.max(0, getHeight() - 3));
-		hScroller.setWidth(Math.max(1, getWidth() - 3));
+		int width = getWidth() - 1; // vertical prio
+		int height = getHeight();
+
+		int x = Math.max(0, width);
+		int y = Math.max(0, height - 1);
+
+		vScroller.setX(x);
+		vScroller.setHeight(height);
+		hScroller.setY(y);
+		hScroller.setWidth(width);
 
 		// virtual_size
 		// - the other scroll bar size
-		// + 2 (for the border of the window)
+		// - 2 (for the border of the window)
 		vScroller.setTopValue(0);
 		vScroller.setBottomValue(Math.max(0, getVirtualHeight() - getHeight()
-				+ hScroller.getHeight() + 2));
+				- hScroller.getHeight() - 2));
 		hScroller.setLeftValue(0);
 		hScroller.setRightValue(Math.max(0, getVirtualWidth() - getWidth()
-				+ vScroller.getWidth() + 2));
+				- vScroller.getWidth() - 2));
 	}
 }
