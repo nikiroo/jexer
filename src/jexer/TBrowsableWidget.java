@@ -26,7 +26,7 @@
  * @author David ROULET [niki@nikiroo.be]
  * @version 2
  */
-package jexer;
+package be.nikiroo.jexer;
 
 import static jexer.TKeypress.kbBackTab;
 import static jexer.TKeypress.kbDown;
@@ -398,13 +398,12 @@ abstract public class TBrowsableWidget extends TScrollableWidget {
 		hScroller.setWidth(width);
 
 		// virtual_size
-		// - the other scroll bar size
-		// - 2 (for the border of the window)
+		// + the other scroll bar size
 		vScroller.setTopValue(0);
 		vScroller.setBottomValue(Math.max(0, getVirtualHeight() - getHeight()
-				- hScroller.getHeight() - 2));
+				+ hScroller.getHeight()));
 		hScroller.setLeftValue(0);
 		hScroller.setRightValue(Math.max(0, getVirtualWidth() - getWidth()
-				- vScroller.getWidth() - 2));
+				+ vScroller.getWidth()));
 	}
 }
