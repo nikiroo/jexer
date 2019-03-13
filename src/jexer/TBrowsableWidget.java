@@ -26,7 +26,7 @@
  * @author David ROULET [niki@nikiroo.be]
  * @version 2
  */
-package be.nikiroo.jexer;
+package jexer;
 
 import static jexer.TKeypress.kbBackTab;
 import static jexer.TKeypress.kbDown;
