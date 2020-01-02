@@ -1,0 +1,9 @@
+# Subtrees
+
+# The subtrees used for this program:
+# 	```git subtree add -P src/jexer git@github.com:nikiroo/jexer.git subtree```
+
+# Update all subtrees:
+
+git subtree pull -P src/jexer git@github.com:nikiroo/jexer.git subtree
+
